@@ -1,6 +1,7 @@
 #pragma once
 #include "resourcehelpers.h"
 #include "../device/device.h"
+#include "../commands.h"
 #include "../glmdefines.h"
 
 #include <fastgltf/core.hpp>
@@ -9,6 +10,7 @@
 
 namespace vulkan {
     class Device;
+    struct  UploadContext;
 
     struct Surface {
         u32 initialIndex{};
@@ -39,7 +41,7 @@ namespace vulkan {
 
     class MeshManager {
     public:
-        MeshManager(vulkan::Device& _device, u64 initialCount);
+        MeshManager(vulkan::Device& _device, UploadContext& _context, u64 initialCount);
 
         MeshHandle create_mesh(const fastgltf::Mesh& gltfMesh, const VertexBuffer& vertexBuffer);
         std::vector<MeshHandle> create_meshes(const fastgltf::Asset &asset);
@@ -51,6 +53,7 @@ namespace vulkan {
 
     private:
         Device& device;
+        UploadContext& context;
         std::vector<VertexBuffer> vertexBuffers;
         std::vector<Mesh> meshes;
         u32 currentMesh = 0;

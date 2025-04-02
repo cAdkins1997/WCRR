@@ -13,7 +13,6 @@ namespace vulkan  {
     };
 
     class Device;
-    struct UploadContext;
 
     struct Material {
         glm::vec4 baseColorFactor{};

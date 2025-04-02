@@ -154,7 +154,7 @@ namespace vulkan {
         const vk::PipelineStageFlagBits2 wait,
         const vk::PipelineStageFlagBits2 signal) {
 
-        const vk::CommandBuffer cmd = context._commandBuffer.get_handle();
+        const vk::CommandBuffer cmd = context._commandBuffer;
         const vk::CommandBufferSubmitInfo commandBufferSI(cmd);
 
         vk::SemaphoreSubmitInfo waitInfo(get_current_frame().swapchainSemaphore);
@@ -176,7 +176,7 @@ namespace vulkan {
         const vk::PipelineStageFlagBits2 wait,
         const vk::PipelineStageFlagBits2 signal) {
 
-        const vk::CommandBuffer cmd = context._commandBuffer.get_handle();
+        const vk::CommandBuffer cmd = context._commandBuffer;
         const vk::CommandBufferSubmitInfo commandBufferSI(cmd);
 
         vk::SemaphoreSubmitInfo waitInfo(get_current_frame().swapchainSemaphore);
@@ -245,9 +245,17 @@ namespace vulkan {
             );
     }
 
+    void Device::wait_on_present() {
+        const auto currentFrame = get_current_frame();
+        vk_check(handle.waitForFences(1, &currentFrame.renderFence, true, UINT64_MAX), "Failed to wait for fences");
+        vk_check(handle.resetFences(1, &currentFrame.renderFence), "Failed to reset fences");
+    }
+
     void Device::wait_on_work() {
-        vk_check(handle.waitForFences(1, &get_current_frame().renderFence, true, UINT64_MAX), "Failed to wait for fences");
-        vk_check(handle.resetFences(1, &get_current_frame().renderFence), "Failed to reset fences");
+        const auto currentFrame = get_current_frame();
+        const std::array fences { currentFrame.renderFence, immediateFence };
+        vk_check(handle.waitForFences(1, &fences[1], true, UINT64_MAX), "Failed to wait for fences");
+        vk_check(handle.resetFences(1, &fences[1]), "Failed to reset fences");
     }
 
     void Device::present() {
@@ -289,7 +297,7 @@ namespace vulkan {
             allocInfo.level = vk::CommandBufferLevel::ePrimary;
 
             vk_check(
-                handle.allocateCommandBuffers(&allocInfo, &frames[i].commandBuffer.handle),
+                handle.allocateCommandBuffers(&allocInfo, &frames[i].commandBuffer),
                 "Failed to allocate command buffers"
             );
         }

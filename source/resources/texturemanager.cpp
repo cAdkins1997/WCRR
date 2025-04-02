@@ -409,13 +409,17 @@ namespace vulkan {
         memcpy(stagingData, data.data(), stagingBufferSize);
         vmaUnmapMemory(device.get_allocator(), stagingBuffer.allocation);
 
+        device.wait_on_work();
+        context.begin();
         for (u32 i = 0; i < ktxTexturePs.size(); i++) {
             image_barrier(images[i].handle, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
             device.immediateCommandBuffer.copyBufferToImage(stagingBuffer.handle, images[i].handle, vk::ImageLayout::eTransferDstOptimal, copyRegions[i]);
             image_barrier(images[i].handle, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
         }
+        context.end();
+        device.submit_upload_work(context, vk::PipelineStageFlagBits2::eNone, vk::PipelineStageFlagBits2::eCopy);
 
-        //device.get_handle().destroyBuffer(stagingBuffer.handle);
+        device.get_handle().destroyBuffer(stagingBuffer.handle);
 
         return handles;
     }
@@ -486,13 +490,6 @@ namespace vulkan {
         Sampler& sampler = samplers[index];
 
         return samplers[index];
-    }
-
-    void TextureManager::write_textures(descriptors::DescriptorWriter& writer, u32 binding) {
-        for (const auto& texture : textures) {
-            const auto sampler = get_sampler(texture.sampler).sampler;
-            writer.write_image(binding, texture.view, sampler, vk::ImageLayout::eShaderReadOnlyOptimal, vk::DescriptorType::eCombinedImageSampler);
-        }
     }
 
     void TextureManager::write_textures(DescriptorBuilder& builder) {

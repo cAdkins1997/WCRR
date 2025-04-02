@@ -3,11 +3,10 @@
 #include "../resources.h"
 #include "../glmdefines.h"
 #include "../pipelines/descriptors.h"
+#include "../commands.h"
 
 #include <fastgltf/types.hpp>
 #include <ktx.h>
-
-#include "../pipelines/descriptors2.h"
 
 typedef ktx_uint64_t ku64;
 typedef ktx_uint32_t ku32;
@@ -51,9 +50,7 @@ namespace vulkan {
         Image& get_texture(TextureHandle handle);
         Sampler& get_sampler(SamplerHandle handle);
 
-        void write_textures(descriptors::DescriptorWriter& writer, u32 binding);
         void write_textures(DescriptorBuilder& builder);
-        void write_samplers(descriptors::DescriptorWriter& writer, u32 binding);
 
         void set_texture_sampler(TextureHandle textureHandle, SamplerHandle samplerHandle);
 

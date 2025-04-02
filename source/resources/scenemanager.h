@@ -19,6 +19,7 @@ namespace vulkan {
     class TextureManager;
     class MaterialManager;
     struct GraphicsContext;
+    struct  UploadContext;
     class SceneManager;
 
     enum class MaterialPass : u8 {

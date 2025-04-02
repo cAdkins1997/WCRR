@@ -3,7 +3,7 @@
 #include "meshmanager.h"
 
 namespace vulkan {
-    MeshManager::MeshManager(vulkan::Device &_device, u64 initialCount = 0) : device(_device) {
+    MeshManager::MeshManager(vulkan::Device &_device, UploadContext& _context, u64 initialCount = 0) : device(_device), context(_context) {
         meshes.reserve(initialCount);
     }
 
@@ -156,11 +156,13 @@ namespace vulkan {
         vk::DeviceAddress bda = device.get_handle().getBufferAddress(bdaInfo);
         vertexBuffer.vertexBufferAddress = bda;
 
-        /*device.submit_immediate_work([&](vk::CommandBuffer commandBuffer) {
+        context.begin();
+        context.copy_buffer(stagingBuffer, vertexBuffer.vertexBuffer, 0, 0, vertexBufferSize);
+        context.copy_buffer(stagingBuffer, vertexBuffer.indexBuffer, vertexBufferSize, 0, indexBufferSize);
+        context.end();
 
-        });*/
-        copy_buffer(device.immediateCommandBuffer, stagingBuffer, vertexBuffer.vertexBuffer, 0, 0, vertexBufferSize);
-        copy_buffer(device.immediateCommandBuffer, stagingBuffer, vertexBuffer.indexBuffer, vertexBufferSize, 0, indexBufferSize);
+        device.submit_upload_work(context, vk::PipelineStageFlagBits2::eNone, vk::PipelineStageFlagBits2::eCopy);
+
         device.get_handle().destroyBuffer(stagingBuffer.handle);
     }
 

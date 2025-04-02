@@ -1,30 +1,16 @@
 #include "commands.h"
 
-#include <iostream>
-#include <ostream>
-
-#include "stb_image.h"
-
 namespace vulkan {
-    ComputeContext::ComputeContext(vulkan::CommandBuffer &commandBuffer) : _commandBuffer(commandBuffer) {
-        _commandBuffer.bound = true;
-    }
+    ComputeContext::ComputeContext(vk::CommandBuffer& commandBuffer) : _commandBuffer(commandBuffer) {}
 
     void ComputeContext::begin() const {
-        auto handle = _commandBuffer.get_handle();
-        handle.reset();
+        _commandBuffer.reset();
         vk::CommandBufferBeginInfo beginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-        vk_check(handle.begin(&beginInfo), "Failed to begine command buffer");
+        vk_check(_commandBuffer.begin(&beginInfo), "Failed to begin command buffer");
     }
 
     void ComputeContext::end() const {
-        auto handle = _commandBuffer.get_handle();
-        handle.end();
-    }
-
-    void ComputeContext::unbind_command_buffer() {
-        _commandBuffer.bound = false;
-        _commandBuffer = {};
+        _commandBuffer.end();
     }
 
     void ComputeContext::image_barrier(vk::Image image, vk::ImageLayout currentLayout, vk::ImageLayout newLayout) const {
@@ -51,8 +37,7 @@ namespace vulkan {
         dependencyInfo.imageMemoryBarrierCount = 1;
         dependencyInfo.pImageMemoryBarriers = &imageBarrier;
 
-        auto handle = _commandBuffer.get_handle();
-        handle.pipelineBarrier2(&dependencyInfo);
+        _commandBuffer.pipelineBarrier2(&dependencyInfo);
     }
 
     void ComputeContext::copy_image(vk::Image src, vk::Image dst, vk::Extent3D srcSize, vk::Extent3D dstSize) const {
@@ -86,28 +71,25 @@ namespace vulkan {
             vk::Filter::eLinear
             );
 
-        auto handle = _commandBuffer.get_handle();
 
-        handle.blitImage2(&blitInfo);
+        _commandBuffer.blitImage2(&blitInfo);
     }
 
     void ComputeContext::bind_pipeline(const vulkan::Pipeline &pipeline) {
         _pipeline = pipeline;
 
-        auto handle = _commandBuffer.get_handle();
-        handle.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
-        handle.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipelineLayout, 0, 1, &pipeline.set, 0, nullptr);
+        _commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
+        _commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipelineLayout, 0, 1, &pipeline.set, 0, nullptr);
     }
 
     void ComputeContext::dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) const {
-        auto handle = _commandBuffer.get_handle();
-        handle.dispatch(groupCountX, groupCountY, groupCountZ);
+        _commandBuffer.dispatch(groupCountX, groupCountY, groupCountZ);
     }
 
     UploadContext::UploadContext(
         const vk::Device &device,
-        const vk::CommandBuffer &commandBuffer,
-        const VmaAllocator &allocator) :
+        vk::CommandBuffer &commandBuffer,
+        vma::Allocator &allocator) :
     _allocator(allocator) , _commandBuffer(commandBuffer), _device(device) {}
 
     void UploadContext::begin() const {
@@ -153,7 +135,7 @@ namespace vulkan {
     }
 
     void UploadContext::buffer_barrier(
-        Buffer buffer,
+        const Buffer &buffer,
         vk::DeviceSize offset,
         vk::PipelineStageFlags srcStageFlags,
         vk::AccessFlags srcAccessMask,
@@ -228,7 +210,8 @@ namespace vulkan {
     }
 
     void UploadContext::upload_uniform(void *data, u64 dataSize, Buffer &uniform) const {
-        if (uniform.properties & vk::MemoryPropertyFlagBits::eHostVisible) {
+        auto propertyFlags = _allocator.getAllocationMemoryProperties(uniform.allocation);
+        if (propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible) {
             memcpy(uniform.get_mapped_data(), data, dataSize);
             _allocator.flushAllocation(uniform.allocation, 0, vk::WholeSize),
 
@@ -321,19 +304,16 @@ namespace vulkan {
         _allocator.destroyImage(image.handle, image.allocation);
     }
 
-    GraphicsContext::GraphicsContext(const vulkan::CommandBuffer &commandBuffer) : _commandBuffer(commandBuffer){
-        _commandBuffer.bound = true;
-    }
+    GraphicsContext::GraphicsContext(vk::CommandBuffer& commandBuffer) : _commandBuffer(commandBuffer){}
 
     void GraphicsContext::begin() const {
-        auto handle = _commandBuffer.get_handle();
-        handle.reset();
+        _commandBuffer.reset();
         vk::CommandBufferBeginInfo beginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-        vk_check(handle.begin(&beginInfo), "Failed to begin command buffer");
+        vk_check(_commandBuffer.begin(&beginInfo), "Failed to begin command buffer");
     }
 
     void GraphicsContext::end() const {
-        _commandBuffer.get_handle().end();
+        _commandBuffer.end();
     }
 
     void GraphicsContext::memory_barrier(
@@ -348,7 +328,7 @@ namespace vulkan {
         vk::DependencyInfo dependencyInfo;
         dependencyInfo.memoryBarrierCount = 1;
         dependencyInfo.pMemoryBarriers = &memoryBarrier;
-        _commandBuffer.get_handle().pipelineBarrier2(&dependencyInfo);
+        _commandBuffer.pipelineBarrier2(&dependencyInfo);
     }
 
     void GraphicsContext::buffer_barrier(vulkan::Buffer buffer, vk::DeviceSize offset, vk::PipelineStageFlags2 srcStageFlags,
@@ -365,7 +345,7 @@ namespace vulkan {
         vk::DependencyInfo dependencyInfo;
         dependencyInfo.bufferMemoryBarrierCount = 1;
         dependencyInfo.pBufferMemoryBarriers = &bufferBarrier;
-        _commandBuffer.get_handle().pipelineBarrier2(&dependencyInfo);
+        _commandBuffer.pipelineBarrier2(&dependencyInfo);
     }
 
     void GraphicsContext::image_barrier(vk::Image image, vk::ImageLayout currentLayout, vk::ImageLayout newLayout) const {
@@ -391,7 +371,7 @@ namespace vulkan {
         vk::DependencyInfo dependencyInfo;
         dependencyInfo.imageMemoryBarrierCount = 1;
         dependencyInfo.pImageMemoryBarriers = &imageBarrier;
-        _commandBuffer.get_handle().pipelineBarrier2(&dependencyInfo);
+        _commandBuffer.pipelineBarrier2(&dependencyInfo);
     }
 
     void GraphicsContext::copy_image(vk::Image src, vk::Image dst, vk::Extent3D srcSize, vk::Extent3D dstSize) const {
@@ -425,7 +405,7 @@ namespace vulkan {
             vk::Filter::eLinear
             );
 
-        _commandBuffer.get_handle().blitImage2(&blitInfo);
+        _commandBuffer.blitImage2(&blitInfo);
     }
 
     void GraphicsContext::set_up_render_pass(
@@ -441,26 +421,25 @@ namespace vulkan {
         renderInfo.pDepthAttachment = depthImage;
         renderInfo.layerCount = 1;
         renderInfo.colorAttachmentCount = 1;
-        _commandBuffer.get_handle().beginRendering(&renderInfo);
+        _commandBuffer.beginRendering(&renderInfo);
     }
 
     void GraphicsContext::end_render_pass() const {
-        auto handle = _commandBuffer.get_handle();
-        handle.endRendering();
+        _commandBuffer.endRendering();
     }
 
     void GraphicsContext::set_viewport(float x, float y, float minDepth, float maxDepth) const {
         vk::Viewport viewport(0, 0, x, y);
         viewport.minDepth = minDepth;
         viewport.maxDepth = maxDepth;
-        _commandBuffer.get_handle().setViewport(0, 1, &viewport);
+        _commandBuffer.setViewport(0, 1, &viewport);
     }
 
     void GraphicsContext::set_viewport(vk::Extent2D extent, float minDepth, float maxDepth) const {
         vk::Viewport viewport(0, 0, extent.width, extent.height);
         viewport.minDepth = minDepth;
         viewport.maxDepth = maxDepth;
-        _commandBuffer.get_handle().setViewport(0, 1, &viewport);
+        _commandBuffer.setViewport(0, 1, &viewport);
     }
 
     void GraphicsContext::set_scissor(uint32_t x, uint32_t y) const {
@@ -469,7 +448,7 @@ namespace vulkan {
         scissor.extent = extent;
         scissor.offset.x = 0;
         scissor.offset.y = 0;
-        _commandBuffer.get_handle().setScissor(0, 1, &scissor);
+        _commandBuffer.setScissor(0, 1, &scissor);
     }
 
     void GraphicsContext::set_scissor(vk::Extent2D extent) const {
@@ -477,32 +456,29 @@ namespace vulkan {
         scissor.extent = extent;
         scissor.offset.x = 0;
         scissor.offset.y = 0;
-        _commandBuffer.get_handle().setScissor(0, 1, &scissor);
+        _commandBuffer.setScissor(0, 1, &scissor);
     }
 
     void GraphicsContext::bind_pipeline(const vulkan::Pipeline &pipeline) {
         _pipeline = pipeline;
-        auto handle = _commandBuffer.get_handle();
-        handle.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
-        handle.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipelineLayout, 0, 1, &pipeline.set, 0, nullptr);
+        _commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
+        _commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipelineLayout, 0, 1, &pipeline.set, 0, nullptr);
     }
 
     void GraphicsContext::bind_index_buffer(const vulkan::Buffer &indexBuffer) const {
-        _commandBuffer.get_handle().bindIndexBuffer(indexBuffer.handle, 0, vk::IndexType::eUint32);
+        _commandBuffer.bindIndexBuffer(indexBuffer.handle, 0, vk::IndexType::eUint32);
     }
 
     void GraphicsContext::bind_vertex_buffer(const vulkan::Buffer &vertexBuffer) const {
         vk::DeviceSize offsets[] = {0};
-        _commandBuffer.get_handle().bindVertexBuffers(0, vertexBuffer.handle, offsets);
+        _commandBuffer.bindVertexBuffers(0, vertexBuffer.handle, offsets);
     }
 
     void GraphicsContext::set_push_constants(const void *pPushConstants, const u64 size, const vk::ShaderStageFlags shaderStage) const {
-        auto handle = _commandBuffer.get_handle();
-        handle.pushConstants(_pipeline.pipelineLayout, shaderStage, 0, size, pPushConstants);
+        _commandBuffer.pushConstants(_pipeline.pipelineLayout, shaderStage, 0, size, pPushConstants);
     }
 
     void GraphicsContext::draw(uint32_t count, uint32_t startIndex) const {
-        auto handle = _commandBuffer.get_handle();
-        handle.drawIndexed(count, 1, startIndex, 0, 0);
+        _commandBuffer.drawIndexed(count, 1, startIndex, 0, 0);
     }
 }

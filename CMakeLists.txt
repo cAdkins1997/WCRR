@@ -10,11 +10,11 @@ find_package(unofficial-vulkan-memory-allocator-hpp HINTS "C:/Users/ulver/.vcpkg
 find_package(unofficial-spirv-reflect CONFIG REQUIRED HINTS "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/spirv-reflect_x64-mingw-dynamic")
 find_package(EABase CONFIG REQUIRED HINTS "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/eabase_x64-mingw-dynamic")
 find_package(EASTL CONFIG REQUIRED HINTS "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/eastl_x64-mingw-dynamic")
+find_package(zstd CONFIG REQUIRED HINTS "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/zstd_x64-windows")
 find_package(Ktx CONFIG REQUIRED HINTS  "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/ktx_x64-windows")
 
 add_subdirectory(include/glfw-3.4)
 add_subdirectory(include/fastgltf-0.8.0)
-#add_subdirectory(include/KTX-Software-4.3.2)
 
 set(EASTL_LIBRARY debug ${z}/build/Debug/EASTL.lib optimized ${EASTL_ROOT_DIR}/build/Release/EASTL.lib)
 
@@ -34,8 +34,6 @@ add_executable(${PROJECT_NAME}
         source/commands.cpp
         source/device/device.cpp
         source/main.cpp
-        source/pipelines/descriptors.h
-        source/pipelines/descriptors.cpp
         source/glmdefines.h
         include/simdjson.h
         include/simdjson.cpp
@@ -43,7 +41,6 @@ add_executable(${PROJECT_NAME}
         source/pipelines/pipelineBuilder.h
         source/application.cpp
         source/application.h
-        source/stb_image.h
         source/scene/camera.cpp
         source/scene/camera.h
         source/resources/texturemanager.cpp
@@ -56,8 +53,8 @@ add_executable(${PROJECT_NAME}
         source/resources/materialmanager.h
         source/resources/scenemanager.cpp
         source/resources/scenemanager.h
-        source/pipelines/descriptors2.cpp
-        source/pipelines/descriptors2.h
+        source/pipelines/descriptors.cpp
+        source/pipelines/descriptors.h
 )
 
 target_link_libraries(

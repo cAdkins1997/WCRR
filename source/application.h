@@ -10,7 +10,7 @@
 #include <glm/gtx/string_cast.hpp>
 #include "glmdefines.h"
 
-#include "pipelines/descriptors2.h"
+#include "pipelines/descriptors.h"
 
 struct SceneData {
     glm::mat4 view;
@@ -44,10 +44,6 @@ private:
 
     f32 deltaTime = 0.0f;
     f32 lastFrameTime = 0.0f;
-
-    vulkan::descriptors::DescriptorAllocator descriptorAllocator;
-    vulkan::descriptors::DescriptorWriter writer;
-    vulkan::descriptors::DescriptorLayoutBuilder builder;
 
     vulkan::Pipeline opaquePipeline;
     vulkan::Pipeline transparentPipeline;

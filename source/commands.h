@@ -10,30 +10,29 @@ namespace vulkan {
     struct Vertex;
 
     struct ComputeContext {
-        explicit ComputeContext(CommandBuffer& commandBuffer);
+        explicit ComputeContext(vk::CommandBuffer& commandBuffer);
 
         void begin() const;
         void end() const;
-        void unbind_command_buffer();
         void image_barrier(vk::Image image, vk::ImageLayout currentLayout, vk::ImageLayout newLayout) const;
         void copy_image(vk::Image src, vk::Image dst, vk::Extent3D srcSize, vk::Extent3D dstSize) const;
         void resource_barrier();
         void bind_pipeline(const Pipeline& pipeline);
         void dispatch(u32 groupCountX, u32 groupCountY, u32 groupCountZ) const;
 
-        CommandBuffer _commandBuffer;
+        vk::CommandBuffer& _commandBuffer;
         Pipeline _pipeline;
     };
 
     struct UploadContext {
-        explicit UploadContext(const vk::Device& device, const vk::CommandBuffer& commandBuffer, const VmaAllocator& allocator);
+        explicit UploadContext(const vk::Device& device, vk::CommandBuffer& commandBuffer, vma::Allocator& allocator);
 
         void begin() const;
         void end() const;
 
         void image_barrier(vk::Image image, vk::ImageLayout currentLayout, vk::ImageLayout newLayout) const;
         void buffer_barrier(
-            Buffer buffer,
+            const Buffer &buffer,
             vk::DeviceSize offset,
             vk::PipelineStageFlags srcStageFlags,
             vk::AccessFlags srcAccessMask,
@@ -56,14 +55,14 @@ namespace vulkan {
         void destroy_image(const Image& image) const;
 
     public:
-        vma::Allocator _allocator{};
-        vk::CommandBuffer _commandBuffer;
+        vma::Allocator& _allocator;
+        vk::CommandBuffer& _commandBuffer;
         vk::Device _device;
         Pipeline _pipeline;
     };
 
     struct GraphicsContext {
-        explicit GraphicsContext(const CommandBuffer& commandBuffer);
+        explicit GraphicsContext(vk::CommandBuffer& commandBuffer);
 
         void begin() const;
         void end() const;
@@ -89,7 +88,7 @@ namespace vulkan {
 
         void draw(u32 count, u32 startIndex) const;
 
-        CommandBuffer _commandBuffer;
+        vk::CommandBuffer& _commandBuffer;
         Pipeline _pipeline;
     };
 

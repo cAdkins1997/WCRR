@@ -26,7 +26,7 @@ namespace vulkan {
 
     struct FrameData {
         vk::CommandPool commandPool;
-        CommandBuffer commandBuffer;
+        vk::CommandBuffer commandBuffer;
         vk::Semaphore swapchainSemaphore;
         vk::Semaphore renderSemaphore;
         vk::Fence renderFence;
@@ -103,6 +103,7 @@ namespace vulkan {
         void submit_upload_work(const UploadContext& context) const;
         void submit_immediate_work(std::function<void(vk::CommandBuffer)>&& function) const;
 
+        void wait_on_present();
         void wait_on_work();
         void present();
 
@@ -115,7 +116,7 @@ namespace vulkan {
         [[nodiscard]] u32 get_width() const { return width; }
         [[nodiscard]] u32 get_height() const { return height; }
 
-        [[nodiscard]] vma::Allocator get_allocator() const { return allocator; }
+        [[nodiscard]] vma::Allocator &get_allocator() { return allocator; }
         u32 get_swapchain_image_index();
 
     public:

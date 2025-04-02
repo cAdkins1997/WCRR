@@ -21,8 +21,6 @@ typedef int64_t i64;
 typedef float f32;
 typedef double f64;
 
-#include "stb_image.h"
-
 void vk_check(vk::Result result, const std::string& outputString);
 void vk_check(VkResult result, const std::string& outputString);
 

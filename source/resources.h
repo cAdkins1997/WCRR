@@ -16,16 +16,6 @@ namespace vulkan {
     enum class NodeHandle : u32 { Invalid = 0 };
     enum class LightHandle : u32 { Invalid = 0 };
 
-    class CommandBuffer {
-    public:
-        bool bound = false;
-
-        [[nodiscard]] vk::CommandBuffer get_handle() const { return handle; }
-
-        vk::CommandBuffer handle;
-    };
-
-
     struct Buffer {
         vk::Buffer handle;
         vma::Allocation allocation;

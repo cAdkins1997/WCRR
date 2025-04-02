@@ -4,12 +4,17 @@
 #include <vk_mem_alloc.h>
 #include <vulkan-memory-allocator-hpp/vk_mem_alloc.hpp>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
+struct traced_new_tag_t {};
+constexpr traced_new_tag_t traced_new_tag;
 
+#include <iostream>
 
 void* operator new [](size_t size, const char *name, int flags, unsigned debugFlags, const char *file, int line) {
     return new uint8_t[size];
+}
+
+void* operator new[](size_t size) {
+    return malloc(size);
 }
 
 void vk_check(const vk::Result result, const std::string& outputString) {

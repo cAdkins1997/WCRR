@@ -1,7 +1,7 @@
 
 #include "application.h"
 
-#include "pipelines/descriptors2.h"
+#include "pipelines/descriptors.h"
 #include "pipelines/pipelineBuilder.h"
 
 void mouse_callback(GLFWwindow *window, double xposIn, double yposIn) {
@@ -56,7 +56,7 @@ Application::Application(vulkan::Device& _device) : device(_device) {
     sceneManager = std::make_unique<vulkan::SceneManager>(device, uploadContext);
     textureManager = std::make_unique<vulkan::TextureManager>(vulkan::TextureManager(device, uploadContext, 1));
     materialManager = std::make_unique<vulkan::MaterialManager>(vulkan::MaterialManager(device, 1));
-    meshManager = std::make_unique<vulkan::MeshManager>(vulkan::MeshManager(device, 1));
+    meshManager = std::make_unique<vulkan::MeshManager>(vulkan::MeshManager(device, uploadContext, 1));
     init();
     run();
 }
@@ -80,14 +80,14 @@ void Application::draw() {
     deltaTime = currentFrameTime - lastFrameTime;
     lastFrameTime = currentFrameTime;
 
-    device.wait_on_work();
+    device.wait_on_present();
     update();
 
     const u32 index = device.get_swapchain_image_index();
     const vk::Image& currentSwapchainImage = device.swapchainImages[index];
 
-    const auto currentFrame = device.get_current_frame();
-    const auto commandBuffer = currentFrame.commandBuffer;
+    auto& currentFrame = device.get_current_frame();
+    vk::CommandBuffer& commandBuffer = currentFrame.commandBuffer;
 
     process_input(device.get_window(), deltaTime);
 
@@ -101,7 +101,7 @@ void Application::draw() {
         );
     sceneData.cameraPosition = glm::vec3(camera.Position.x, camera.Position.y, camera.Position.z);
 
-    vulkan::UploadContext uploadContext(device.get_handle(), commandBuffer.get_handle(), device.get_allocator());
+    vulkan::UploadContext uploadContext(device.get_handle(), commandBuffer, device.get_allocator());
     uploadContext.begin();
     uploadContext.update_uniform(&sceneData, sizeof(SceneData), sceneDataBuffer);
 
@@ -118,7 +118,7 @@ void Application::draw() {
 
     sceneManager->draw_scene(graphicsContext, *meshManager, *materialManager, testScene);
 
-    graphicsContext.end_render_pass();
+    graphicsContext._commandBuffer.endRendering();
 
     graphicsContext.image_barrier(drawHandle, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eTransferSrcOptimal);
     graphicsContext.image_barrier(currentSwapchainImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
@@ -145,35 +145,6 @@ void Application::update() const {
 }
 
 void Application::init_descriptors() {
-    /*std::vector<vulkan::descriptors::DescriptorAllocator::PoolSizeRatio> sizes {
-        { vk::DescriptorType::eUniformBuffer, 128 },
-        { vk::DescriptorType::eStorageBuffer, 128 },
-        { vk::DescriptorType::eCombinedImageSampler, 128 }
-    };
-
-    descriptorAllocator.init(device.get_handle(), 10, sizes);
-
-    {
-        vulkan::descriptors::DescriptorLayoutBuilder builder;
-        builder.add_binding(0, vk::DescriptorType::eUniformBuffer);
-        builder.add_binding(1, vk::DescriptorType::eCombinedImageSampler);
-
-        trianglePipeline.setLayout = builder.build(
-            device.get_handle(),
-            vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment
-        );
-
-
-        vulkan::descriptors::DescriptorWriter writer;
-        writer.write_buffer(0, sceneDataBuffer.handle, sizeof(SceneData), 0, vk::DescriptorType::eUniformBuffer);
-
-        textureManager->write_textures(writer, 1);
-
-        trianglePipeline.set = descriptorAllocator.allocate(device.get_handle(), trianglePipeline.setLayout);
-
-        writer.update_set(device.get_handle(), trianglePipeline.set);
-    }*/
-
     auto deviceHandle = device.get_handle();
     DescriptorBuilder builder(deviceHandle);
     auto globalSet = builder.build(opaquePipeline.setLayout);
@@ -281,15 +252,14 @@ void Application::init_scene_resources() {
         vma::AllocationCreateFlagBits::eMapped
         );
 
-
-    vulkan::UploadContext uploadContext(device.get_handle(), device.immediateCommandBuffer, device.get_allocator());
-    uploadContext.begin();
     if (auto gltf = sceneManager->load_gltf("../assets/NewSponza_Main_glTF_003.gltf"); gltf.has_value()) {
         testScene = sceneManager->create_scene(gltf.value(), *meshManager, *textureManager, *materialManager);
         update();
     }
 
-    SceneData sceneData;
+    vulkan::UploadContext uploadContext(device.get_handle(), device.immediateCommandBuffer, device.get_allocator());
+
+    SceneData sceneData{};
     sceneData.view = camera.get_view_matrix();
     sceneData.projection = glm::perspective(
         glm::radians(camera.zoom),
@@ -299,7 +269,9 @@ void Application::init_scene_resources() {
         );
     sceneData.cameraPosition = glm::vec3(camera.Position.x, camera.Position.y, camera.Position.z);
 
-    uploadContext.upload_uniform(&sceneData, sizeof(SceneData), sceneDataBuffer);
-    uploadContext.end();
-    device.submit_upload_work(uploadContext);
+    device.submit_immediate_work(
+        [&](vk::CommandBuffer commandBuffer) {
+            uploadContext.upload_uniform(&sceneData, sizeof(SceneData), sceneDataBuffer);
+        }
+    );
 }
