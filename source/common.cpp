@@ -29,11 +29,11 @@ namespace D3D {
     }
 }
 
-void vk_check(VkResult result, const std::string &outputString) {
+/*void vk_check(VkResult result, const std::string &outputString) {
     if (result != VK_SUCCESS) {
         throw std::runtime_error(outputString + ' ' + string_VkResult(result) + '\n');
     }
-}
+}*/
 
 #endif
 

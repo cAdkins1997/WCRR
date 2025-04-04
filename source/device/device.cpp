@@ -458,7 +458,7 @@ namespace vulkan {
             debugCI.messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
                                       vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
                                       vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation;
-            debugCI.pfnUserCallback = debugMessageFunc;
+            //debugCI.pfnUserCallback = debugMessageFunc;
         }
 
         vk_check(

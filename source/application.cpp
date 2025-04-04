@@ -198,8 +198,8 @@ void Application::init_opaque_pipeline() {
     depthAttachment = VkRenderingAttachmentInfo{.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO, .pNext = nullptr};
     depthAttachment.imageView = depthImage.view;
     depthAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
-    drawAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    drawAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     depthAttachment.clearValue.depthStencil.depth = 0.f;
 }
 
