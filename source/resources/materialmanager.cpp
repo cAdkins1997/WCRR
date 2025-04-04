@@ -95,6 +95,9 @@ namespace vulkan  {
             materialBufferAddress = device.get_handle().getBufferAddress(bdaInfo);
         }
 
+        /*device.deviceDeletionQueue.push_lambda([&]() {
+            vmaDestroyBuffer(device.get_allocator(), materialBuffer.handle, materialBuffer.allocation);
+        });*/
     }
 
     void MaterialManager::update_material_buffer() {

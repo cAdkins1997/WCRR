@@ -26,13 +26,36 @@ namespace vulkan {
     }
 
     Device::~Device() {
+        handle.waitIdle();
+        for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            auto& currentFrame = frames[i];
+            handle.destroyCommandPool(currentFrame.commandPool, nullptr);
+            handle.destroyFence(currentFrame.renderFence, nullptr);
+            handle.destroySemaphore(currentFrame.renderSemaphore, nullptr);
+            handle.destroySemaphore(currentFrame.swapchainSemaphore, nullptr);
+
+            frames[i].deletionQueue.flush();
+        }
+
+        deviceDeletionQueue.flush();
+
+        handle.destroySwapchainKHR(swapchain, nullptr);
+
+        for (auto& view : swapchainImageViews) {
+            handle.destroyImageView(view, nullptr);
+        }
+
+        instance.destroySurfaceKHR(surface, nullptr);
+        handle.destroy();
+
+        glfwDestroyWindow(window);
     }
 
     Buffer Device::create_buffer(
         size_t allocationSize,
         vk::BufferUsageFlags usage,
         VmaMemoryUsage memoryUsage,
-        VmaAllocationCreateFlags flags) const {
+        VmaAllocationCreateFlags flags) {
 
         vk::BufferCreateInfo bufferInfo;
         bufferInfo.pNext = nullptr;
@@ -50,7 +73,7 @@ namespace vulkan {
         return newBuffer;
     }
 
-    Image Device::create_image(vk::Extent3D size, VkFormat format, VkImageUsageFlags usage, u32 mipLevels, bool mipmapped) const {
+    Image Device::create_image(vk::Extent3D size, VkFormat format, VkImageUsageFlags usage, u32 mipLevels, bool mipmapped) {
         Image newImage{};
         newImage.format = format;
         newImage.extent = size;
@@ -95,7 +118,7 @@ namespace vulkan {
         return newImage;
     }
 
-    Sampler Device::create_sampler(const vk::Filter minFilter, const vk::Filter magFilter, const vk::SamplerMipmapMode mipmapMode) const {
+    Sampler Device::create_sampler(const vk::Filter minFilter, const vk::Filter magFilter, const vk::SamplerMipmapMode mipmapMode) {
 
         vk::SamplerCreateInfo samplerCI;
         samplerCI.minFilter = minFilter;
@@ -111,7 +134,7 @@ namespace vulkan {
         return Sampler{magFilter, minFilter, newSampler};
     }
 
-    Shader Device::create_shader(std::string_view filePath) const {
+    Shader Device::create_shader(std::string_view filePath) {
         std::ifstream file(filePath.data(), std::ios::ate | std::ios::binary);
 
         if (!file.is_open()) {
@@ -136,8 +159,10 @@ namespace vulkan {
             "Failed to create shader module"
             );
 
-        Shader shader {shaderModule};
+        Shader shader;
+        shader.module = shaderModule;
         shader.path = filePath.data();
+
         return shader;
     }
 
@@ -350,9 +375,6 @@ namespace vulkan {
         vmaCreateAllocator(&allocatorInfo, &allocator);
     }
 
-    void Device::init_descriptors() {
-    }
-
     void Device::init_draw_images() {
         const VkExtent3D drawImageExtent {width, height, 1};
         drawImage.format = VK_FORMAT_R32G32B32A32_SFLOAT;
@@ -395,6 +417,11 @@ namespace vulkan {
         imageViewCI.subresourceRange = subresourceRange;
 
         vkCreateImageView(handle, &imageViewCI, nullptr, &drawImage.view);
+
+        deviceDeletionQueue.push_lambda([&](){
+            vmaDestroyImage(allocator, drawImage.handle, drawImage.allocation);
+            vkDestroyImageView(handle, drawImage.view, nullptr);
+        });
     }
 
     void Device::init_depth_images() {
@@ -432,6 +459,11 @@ namespace vulkan {
         imageViewCI.subresourceRange = subresourceRange;
 
         vkCreateImageView(handle, &imageViewCI, nullptr, &depthImage.view);
+
+        deviceDeletionQueue.push_lambda([&](){
+            vmaDestroyImage(allocator, depthImage.handle, depthImage.allocation);
+            vkDestroyImageView(handle, depthImage.view, nullptr);
+        });
     }
 
     void Device::init_instance() {
@@ -458,7 +490,7 @@ namespace vulkan {
             debugCI.messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
                                       vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
                                       vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation;
-            //debugCI.pfnUserCallback = debugMessageFunc;
+            debugCI.pfnUserCallback = debugMessageFunc;
         }
 
         vk_check(

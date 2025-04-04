@@ -62,10 +62,6 @@ Application::Application(vulkan::Device& _device) : device(_device) {
 }
 
 Application::~Application() {
-    const vk::Device& d = device.get_handle();
-    d.waitIdle();
-    d.destroyPipelineLayout(opaquePipeline.pipelineLayout);
-    d.destroyPipeline(opaquePipeline.pipeline);
 }
 
 void Application::run() {
@@ -80,13 +76,14 @@ void Application::draw() {
     deltaTime = currentFrameTime - lastFrameTime;
     lastFrameTime = currentFrameTime;
 
-    device.wait_on_present();
     update();
+    device.wait_on_present();
+    auto& currentFrame = device.get_current_frame();
+    //currentFrame.deletionQueue.flush();
 
     const u32 index = device.get_swapchain_image_index();
     const vk::Image& currentSwapchainImage = device.swapchainImages[index];
 
-    auto& currentFrame = device.get_current_frame();
     vk::CommandBuffer& commandBuffer = currentFrame.commandBuffer;
 
     process_input(device.get_window(), deltaTime);
@@ -144,8 +141,7 @@ void Application::update() const {
 }
 
 void Application::init_descriptors() {
-    auto deviceHandle = device.get_handle();
-    DescriptorBuilder builder(deviceHandle);
+    vulkan::DescriptorBuilder builder(device);
     auto globalSet = builder.build(opaquePipeline.setLayout);
     opaquePipeline.set = globalSet;
     transparentPipeline.set = globalSet;
@@ -184,7 +180,7 @@ void Application::init_opaque_pipeline() {
     pipelineBuilder.disable_blending();
     pipelineBuilder.set_color_attachment_format(drawImage.format);
     pipelineBuilder.set_depth_format(depthImage.format);
-    opaquePipeline.pipeline = pipelineBuilder.build_pipeline(device.get_handle());
+    opaquePipeline.pipeline = pipelineBuilder.build_pipeline(device);
 
     device.get_handle().destroyShaderModule(vertShader.module);
     device.get_handle().destroyShaderModule(fragShader.module);
@@ -217,7 +213,7 @@ void Application::init_transparent_pipeline() {
     pipelineBuilder.enable_blending_alphablend();
     pipelineBuilder.set_color_attachment_format(drawImage.format);
     pipelineBuilder.set_depth_format(depthImage.format);
-    transparentPipeline.pipeline = pipelineBuilder.build_pipeline(device.get_handle());
+    transparentPipeline.pipeline = pipelineBuilder.build_pipeline(device);
 
     device.get_handle().destroyShaderModule(vertexShader.module);
     device.get_handle().destroyShaderModule(fragShader.module);
@@ -239,6 +235,10 @@ void Application::init_scene_resources() {
         VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT |
         VMA_ALLOCATION_CREATE_MAPPED_BIT
         );
+
+    device.deviceDeletionQueue.push_lambda([&](){
+        vmaDestroyBuffer(device.get_allocator(), sceneDataBuffer.handle, sceneDataBuffer.allocation);
+    });
 
     if (auto gltf = sceneManager->load_gltf("../assets/NewSponza_Main_glTF_003.gltf"); gltf.has_value()) {
         testScene = sceneManager->create_scene(gltf.value(), *meshManager, *textureManager, *materialManager);

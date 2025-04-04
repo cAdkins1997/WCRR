@@ -5,7 +5,7 @@ void PipelineBuilder::clear() {
     shaderStages.clear();
 }
 
-VkPipeline PipelineBuilder::build_pipeline(VkDevice device) {
+VkPipeline PipelineBuilder::build_pipeline(vulkan::Device& device) {
     VkPipelineViewportStateCreateInfo viewportState{.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
     viewportState.viewportCount = 1;
     viewportState.scissorCount = 1;
@@ -40,7 +40,12 @@ VkPipeline PipelineBuilder::build_pipeline(VkDevice device) {
     pipelineCI.pDynamicState = &dynamicInfo;
 
     VkPipeline newPipeline;
-    vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineCI,nullptr, &newPipeline);
+    vkCreateGraphicsPipelines(device.get_handle(), VK_NULL_HANDLE, 1, &pipelineCI,nullptr, &newPipeline);
+
+    /*device.deviceDeletionQueue.push_lambda([&](){
+        device.get_handle().destroyPipeline(newPipeline);
+    });*/
+
     return newPipeline;
 }
 

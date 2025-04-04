@@ -5,13 +5,14 @@
 #include <vector>
 #include "../common.h"
 #include "../resources.h"
+#include "../device/device.h"
 
 class PipelineBuilder {
 public:
     PipelineBuilder() { clear(); }
 
     void clear();
-    VkPipeline build_pipeline(VkDevice device);
+    VkPipeline build_pipeline(vulkan::Device& device);
 
     void set_shader(VkShaderModule vertexShader, VkShaderModule fragmentShader);
     void set_input_topology(VkPrimitiveTopology topology);

@@ -21,6 +21,7 @@ namespace vulkan {
     class Image;
     class Device;
     struct UploadContext;
+    class DescriptorBuilder;
 
     struct Sampler {
         vk::Filter magFilter;
@@ -32,6 +33,7 @@ namespace vulkan {
     class TextureManager {
     public:
         TextureManager(Device& _device, UploadContext& _context, u64 initialCount);
+        ~TextureManager();
 
         TextureHandle create_texture(
             VkFormat format,
@@ -47,6 +49,8 @@ namespace vulkan {
             );
 
         SamplerHandle create_sampler(const fastgltf::Sampler& fastgltfSampler);
+
+        void delete_texture(TextureHandle handle);
 
         Image& get_texture(TextureHandle handle);
         Sampler& get_sampler(SamplerHandle handle);

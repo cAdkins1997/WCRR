@@ -7,6 +7,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <ranges>
 #include <set>
 #include <GLFW/glfw3.h>
 #include <cmath>
@@ -24,12 +25,29 @@ namespace vulkan {
 
     constexpr u8 MAX_FRAMES_IN_FLIGHT = 2;
 
+    struct DeletionQueue {
+        std::deque<std::function<void()>> deletionLambdas;
+
+        void push_lambda(std::function<void()>&& lambda) {
+            deletionLambdas.push_back(lambda);
+        }
+
+        void flush() {
+            for (auto & deletionLambda : std::ranges::reverse_view(deletionLambdas)) {
+                deletionLambda();
+            }
+
+            deletionLambdas.clear();
+        }
+    };
+
     struct FrameData {
         vk::CommandPool commandPool;
         vk::CommandBuffer commandBuffer;
         vk::Semaphore swapchainSemaphore;
         vk::Semaphore renderSemaphore;
         vk::Fence renderFence;
+        DeletionQueue deletionQueue;
     };
 
 #ifdef NDEBUG
@@ -78,10 +96,10 @@ namespace vulkan {
             size_t allocationSize,
             vk::BufferUsageFlags usage,
             VmaMemoryUsage memoryUsage,
-            VmaAllocationCreateFlags flags = VmaAllocationCreateFlagBits::VMA_ALLOCATION_CREATE_MAPPED_BIT) const;
-        [[nodiscard]] Image create_image(vk::Extent3D size, VkFormat format, VkImageUsageFlags usage, u32 mipLevels, bool mipmapped) const;
-        [[nodiscard]] Sampler create_sampler(vk::Filter minFilter, vk::Filter magFilter, vk::SamplerMipmapMode mipmapMode) const;
-        [[nodiscard]] Shader create_shader(std::string_view filePath) const;
+            VmaAllocationCreateFlags flags = VmaAllocationCreateFlagBits::VMA_ALLOCATION_CREATE_MAPPED_BIT);
+        [[nodiscard]] Image create_image(vk::Extent3D size, VkFormat format, VkImageUsageFlags usage, u32 mipLevels, bool mipmapped);
+        [[nodiscard]] Sampler create_sampler(vk::Filter minFilter, vk::Filter magFilter, vk::SamplerMipmapMode mipmapMode);
+        [[nodiscard]] Shader create_shader(std::string_view filePath);
 
         void submit_graphics_work(const GraphicsContext& context, vk::PipelineStageFlagBits2 wait, vk::PipelineStageFlagBits2 signal);
         void submit_compute_work(const ComputeContext& context, vk::PipelineStageFlagBits2 wait, vk::PipelineStageFlagBits2 signal);
@@ -106,6 +124,7 @@ namespace vulkan {
         [[nodiscard]] VmaAllocator &get_allocator() { return allocator; }
         u32 get_swapchain_image_index();
 
+        DeletionQueue deviceDeletionQueue;
     public:
         [[nodiscard]] FrameData& get_current_frame() { return frames[frameNumber % MAX_FRAMES_IN_FLIGHT]; }
 
@@ -121,7 +140,6 @@ namespace vulkan {
         void init_commands();
         void init_sync_objects();
         void init_allocator();
-        void init_descriptors();
         void init_draw_images();
         void init_depth_images();
 

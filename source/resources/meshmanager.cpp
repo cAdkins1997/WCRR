@@ -1,5 +1,4 @@
 
-
 #include "meshmanager.h"
 
 namespace vulkan {
@@ -161,6 +160,11 @@ namespace vulkan {
         device.submit_upload_work(context, vk::PipelineStageFlagBits2::eNone, vk::PipelineStageFlagBits2::eCopy);
 
         device.get_handle().destroyBuffer(stagingBuffer.handle);
+
+        /*device.deviceDeletionQueue.push_lambda([&]() {
+            vmaDestroyBuffer(allocator, vertexBuffer.vertexBuffer.handle, vertexBuffer.vertexBuffer.allocation);
+            vmaDestroyBuffer(allocator, vertexBuffer.indexBuffer.handle, vertexBuffer.indexBuffer.allocation);
+        });*/
     }
 
     void MeshManager::assert_handle(const MeshHandle handle) const {

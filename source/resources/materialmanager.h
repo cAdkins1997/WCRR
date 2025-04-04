@@ -39,7 +39,7 @@ namespace vulkan  {
     };
 
     class MaterialManager {
-        public:
+    public:
         explicit MaterialManager(Device& _device, u64 initialCount);
 
         MaterialHandle create_material(const fastgltf::Material& material);

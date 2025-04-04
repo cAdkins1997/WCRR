@@ -92,6 +92,7 @@ namespace vulkan {
     class SceneManager {
         public:
         SceneManager(Device& _device, UploadContext& _context);
+        ~SceneManager();
 
         void draw_scene(const GraphicsContext& context, MeshManager& meshManager, const MaterialManager& materialManager, SceneHandle handle) const;
 

@@ -4,8 +4,6 @@ project(TESTWCGL)
 set(CMAKE_CXX_STANDARD 23)
 
 add_executable(${PROJECT_NAME}
-        source/SCGL.cpp
-        source/SCGL.h
         source/common.h
         source/device/device.h
         source/resources.h

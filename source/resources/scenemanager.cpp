@@ -18,7 +18,6 @@ namespace vulkan {
         const u32 sceneIndex = get_handle_index(handle);
 
         auto materialBuffer = materialManager.get_material_buffer_address();
-        auto lightBuffer = get_light_buffer_address();
         auto vertexBuffer = meshManager.get_vertex_buffer(0);
         context.bind_index_buffer(vertexBuffer.indexBuffer);
 
@@ -33,7 +32,7 @@ namespace vulkan {
             for (const auto& surface : mesh.surfaces) {
                 const auto material = get_handle_index(surface.material);
 
-                PushConstants pc { node.worldMatrix, vertexBuffer.vertexBufferAddress, materialBuffer, lightBuffer, material, numLights};
+                PushConstants pc { node.worldMatrix, vertexBuffer.vertexBufferAddress, materialBuffer, lightBufferAddress, material, numLights};
                 context.set_push_constants(&pc, sizeof(pc), vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
                 context.draw(surface.indexCount, surface.initialIndex);
             }
@@ -404,5 +403,9 @@ namespace vulkan {
 
         assert(index <= scenes.size() && "Handle out of bounds");
         assert(lights[index].magicNumber == metaData && "Handle metadata does not match an existing light");
+    }
+
+    SceneManager::~SceneManager() {
+        vmaDestroyBuffer(device.get_allocator(), lightBuffer.handle, lightBuffer.allocation);
     }
 }

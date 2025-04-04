@@ -1,5 +1,3 @@
-#include "SCGL.h"
-#include "pipelines/descriptors.h"
 #include "application.h"
 
 int main() {
