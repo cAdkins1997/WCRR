@@ -25,7 +25,7 @@ namespace vulkan {
     };
 
     struct UploadContext {
-        explicit UploadContext(const vk::Device& device, vk::CommandBuffer& commandBuffer, vma::Allocator& allocator);
+        explicit UploadContext(const vk::Device& device, vk::CommandBuffer& commandBuffer, VmaAllocator& allocator);
 
         void begin() const;
         void end() const;
@@ -55,7 +55,7 @@ namespace vulkan {
         void destroy_image(const Image& image) const;
 
     public:
-        vma::Allocator& _allocator;
+        VmaAllocator& _allocator;
         vk::CommandBuffer& _commandBuffer;
         vk::Device _device;
         Pipeline _pipeline;
@@ -75,7 +75,7 @@ namespace vulkan {
             vk::PipelineStageFlags2 dstStageFlags, vk::AccessFlags2 dstAccessMask) const;
         void image_barrier(vk::Image image, vk::ImageLayout currentLayout, vk::ImageLayout newLayout) const;
         void copy_image(vk::Image src, vk::Image dst, vk::Extent3D srcSize, vk::Extent3D dstSize) const;
-        void set_up_render_pass(vk::Extent2D extent, const vk::RenderingAttachmentInfo *drawImage, const vk::RenderingAttachmentInfo *depthImage) const;
+        void set_up_render_pass(vk::Extent2D extent, const VkRenderingAttachmentInfo *drawImage, const VkRenderingAttachmentInfo *depthImage) const;
         void end_render_pass() const;
         void set_viewport(f32 x, f32 y, f32 minDepth, f32 maxDepth) const;
         void set_viewport(vk::Extent2D extent, f32 minDepth, f32 maxDepth) const;

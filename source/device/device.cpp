@@ -8,8 +8,8 @@ namespace vulkan {
         result->resizeRequested = true;
     }
 
-    Device::Device(eastl::string_view appName, const u32 _width, const u32 _height, u32 countFramesInFlight)
-    : width(_width), height(_height), MAX_FRAMES_IN_FLIGHT(countFramesInFlight) {
+    Device::Device(std::string_view appName, const u32 _width, const u32 _height)
+    : width(_width), height(_height) {
 
         init_window();
         init_instance();
@@ -31,41 +31,40 @@ namespace vulkan {
     Buffer Device::create_buffer(
         size_t allocationSize,
         vk::BufferUsageFlags usage,
-        vma::MemoryUsage memoryUsage,
-        vma::AllocationCreateFlags flags) const {
+        VmaMemoryUsage memoryUsage,
+        VmaAllocationCreateFlags flags) const {
 
         vk::BufferCreateInfo bufferInfo;
         bufferInfo.pNext = nullptr;
         bufferInfo.size = allocationSize;
         bufferInfo.usage = usage;
 
-        vma::AllocationCreateInfo vmaallocInfo;
+        VmaAllocationCreateInfo vmaallocInfo{};
         vmaallocInfo.usage = memoryUsage;
         vmaallocInfo.flags = flags;
 
         Buffer newBuffer{};
-        vk_check(
-            allocator.createBuffer(&bufferInfo, &vmaallocInfo, &newBuffer.handle, &newBuffer.allocation, &newBuffer.info),
-            "Failed to create buffer"
-        );
+
+        vmaCreateBuffer(allocator, (VkBufferCreateInfo*)&bufferInfo, &vmaallocInfo, (VkBuffer*)&newBuffer.handle, &newBuffer.allocation, &newBuffer.info);
+
         return newBuffer;
     }
 
-    Image Device::create_image(vk::Extent3D size, vk::Format format, vk::ImageUsageFlags usage, u32 mipLevels, bool mipmapped) const {
+    Image Device::create_image(vk::Extent3D size, VkFormat format, VkImageUsageFlags usage, u32 mipLevels, bool mipmapped) const {
         Image newImage{};
         newImage.format = format;
         newImage.extent = size;
 
-        vk::ImageCreateInfo imageCI;
+        VkImageCreateInfo imageCI{.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
         imageCI.format = format;
         imageCI.usage = usage;
         imageCI.extent = size;
         imageCI.arrayLayers = 1;
-        imageCI.imageType = vk::ImageType::e2D;
-        imageCI.tiling = vk::ImageTiling::eOptimal;
-        imageCI.sharingMode = vk::SharingMode::eExclusive;
+        imageCI.imageType = VK_IMAGE_TYPE_2D;
+        imageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         imageCI.mipLevels = mipLevels;
-        imageCI.imageType = vk::ImageType::e2D;
+        imageCI.samples = VK_SAMPLE_COUNT_1_BIT;
 
         if (mipmapped) {
             imageCI.mipLevels = mipLevels;
@@ -73,32 +72,25 @@ namespace vulkan {
         else
             imageCI.mipLevels = 1;
 
-        vma::AllocationCreateInfo allocInfo{};
-        allocInfo.usage = vma::MemoryUsage::eGpuOnly;
-        allocInfo.requiredFlags = vk::MemoryPropertyFlagBits::eDeviceLocal;
+        VmaAllocationCreateInfo allocInfo{};
+        allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+        allocInfo.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
-        vk_check(
-            allocator.createImage(&imageCI, &allocInfo, &newImage.handle, &newImage.allocation, nullptr),
-            "Failed to create image"
-        );
+        vmaCreateImage(allocator, (VkImageCreateInfo*)&imageCI, &allocInfo, (VkImage*)&newImage.handle, &newImage.allocation, nullptr);
 
-        vk::ImageAspectFlags aspectFlag = vk::ImageAspectFlagBits::eColor;
-        if (format  == vk::Format::eD32Sfloat)
-            aspectFlag = vk::ImageAspectFlagBits::eDepth;
+        VkImageAspectFlags aspectFlag = VK_IMAGE_ASPECT_COLOR_BIT;
+        if (format == VK_FORMAT_D32_SFLOAT)
+            aspectFlag = VK_IMAGE_ASPECT_DEPTH_BIT;
 
-        vk::ComponentMapping components {
-            vk::ComponentSwizzle::eIdentity,
-            vk::ComponentSwizzle::eIdentity,
-            vk::ComponentSwizzle::eIdentity,
-            vk::ComponentSwizzle::eIdentity
-        };
-
-        vk::ImageViewCreateInfo viewInfo({}, newImage.handle, vk::ImageViewType::e2D, format, components, aspectFlag);
+        VkImageViewCreateInfo viewInfo {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+        viewInfo.image = newImage.handle;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = format;
         viewInfo.subresourceRange.aspectMask = aspectFlag;
         viewInfo.subresourceRange.levelCount = imageCI.mipLevels;
         viewInfo.subresourceRange.layerCount = 1;
 
-        newImage.view = handle.createImageView(viewInfo, nullptr);
+        vkCreateImageView(handle, &viewInfo, nullptr, &newImage.view);
 
         return newImage;
     }
@@ -119,7 +111,7 @@ namespace vulkan {
         return Sampler{magFilter, minFilter, newSampler};
     }
 
-    Shader Device::create_shader(eastl::string_view filePath) const {
+    Shader Device::create_shader(std::string_view filePath) const {
         std::ifstream file(filePath.data(), std::ios::ate | std::ios::binary);
 
         if (!file.is_open()) {
@@ -343,125 +335,103 @@ namespace vulkan {
     }
 
     void Device::init_allocator() {
-        vma::AllocatorCreateInfo allocatorInfo{};
+        /*VmaVulkanFunctions vulkanFunctions = {};
+        vulkanFunctions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
+        vulkanFunctions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;*/
+
+        VmaAllocatorCreateInfo allocatorInfo{};
         allocatorInfo.vulkanApiVersion = vk::ApiVersion13;
         allocatorInfo.physicalDevice = gpu;
         allocatorInfo.device = handle;
         allocatorInfo.instance = instance;
-        allocatorInfo.flags = vma::AllocatorCreateFlagBits::eBufferDeviceAddress;
-        vk_check(
-            vma::createAllocator(&allocatorInfo, &allocator),
-            "Failed to create allocator"
-            );
+        //allocatorInfo.pVulkanFunctions = &vulkanFunctions;
+        allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+
+        vmaCreateAllocator(&allocatorInfo, &allocator);
     }
 
     void Device::init_descriptors() {
     }
 
     void Device::init_draw_images() {
-        const vk::Extent3D drawImageExtent {width, height, 1};
-        drawImage.format = vk::Format::eR32G32B32A32Sfloat;
+        const VkExtent3D drawImageExtent {width, height, 1};
+        drawImage.format = VK_FORMAT_R32G32B32A32_SFLOAT;
         drawImage.extent = drawImageExtent;
 
-        vk::ImageUsageFlags drawImageUsages;
-        drawImageUsages |= vk::ImageUsageFlagBits::eTransferSrc;
-        drawImageUsages |= vk::ImageUsageFlagBits::eTransferDst;
-        drawImageUsages |= vk::ImageUsageFlagBits::eStorage;
-        drawImageUsages |= vk::ImageUsageFlagBits::eColorAttachment;
+        VkImageUsageFlags drawImageUsages =
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+        VK_IMAGE_USAGE_STORAGE_BIT |
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-        vk::ImageCreateInfo imageCI;
+        VkImageCreateInfo imageCI{.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+        imageCI.pNext = nullptr;
         imageCI.format = drawImage.format;
         imageCI.usage = drawImageUsages;
         imageCI.extent = drawImageExtent;
-        imageCI.imageType = vk::ImageType::e2D;
+        imageCI.imageType = VK_IMAGE_TYPE_2D;
         imageCI.mipLevels = 1;
         imageCI.arrayLayers = 1;
+        imageCI.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
 
-        vma::AllocationCreateInfo imageAI;
-        imageAI.usage = vma::MemoryUsage::eGpuOnly;
-        imageAI.requiredFlags = vk::MemoryPropertyFlagBits::eDeviceLocal;
+        VmaAllocationCreateInfo imageAI{};
+        imageAI.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+        imageAI.requiredFlags = (VkMemoryPropertyFlags)VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
-        vk_check(
-            allocator.createImage(&imageCI, &imageAI, &drawImage.handle,  &drawImage.allocation, nullptr),
-            "Failed to create image"
-        );
+        vmaCreateImage(allocator, &imageCI, &imageAI, &drawImage.handle, &drawImage.allocation, nullptr);
 
-        constexpr vk::ComponentMapping components {
-            vk::ComponentSwizzle::eIdentity,
-            vk::ComponentSwizzle::eIdentity,
-            vk::ComponentSwizzle::eIdentity,
-            vk::ComponentSwizzle::eIdentity
-        };
-
-        vk::ImageSubresourceRange subresourceRange;
+        VkImageSubresourceRange subresourceRange;
         subresourceRange.baseMipLevel = 0;
         subresourceRange.levelCount = 1;
         subresourceRange.baseArrayLayer = 0;
         subresourceRange.layerCount = 1;
-        subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+        subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
-        vk::ImageViewCreateInfo imageViewCI;
+        VkImageViewCreateInfo imageViewCI{.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .pNext = nullptr};
         imageViewCI.image = drawImage.handle;
-        imageViewCI.viewType = vk::ImageViewType::e2D;
+        imageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
         imageViewCI.format = drawImage.format;
-        imageViewCI.components = components;
         imageViewCI.subresourceRange = subresourceRange;
 
-        vk_check(
-            handle.createImageView(&imageViewCI, nullptr, &drawImage.view),
-            "Failed to create image view"
-        );
+        vkCreateImageView(handle, &imageViewCI, nullptr, &drawImage.view);
     }
 
     void Device::init_depth_images() {
         const vk::Extent3D depthImageExtent = { width, height, 1};
-        depthImage.format = vk::Format::eD32Sfloat;
+        depthImage.format = VK_FORMAT_D32_SFLOAT;
         depthImage.extent = depthImageExtent;
 
-        constexpr vk::ImageUsageFlags depthImageUsages = vk::ImageUsageFlagBits::eDepthStencilAttachment;
+        constexpr VkImageUsageFlags depthImageUsages = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-        vk::ImageCreateInfo imageCI;
+        VkImageCreateInfo imageCI;
         imageCI.format = depthImage.format;
         imageCI.usage = depthImageUsages;
         imageCI.extent = depthImageExtent;
-        imageCI.imageType = vk::ImageType::e2D;
+        imageCI.imageType = VK_IMAGE_TYPE_2D;
         imageCI.mipLevels = 1;
         imageCI.arrayLayers = 1;
 
-        vma::AllocationCreateInfo allocationCI;
-        allocationCI.usage = vma::MemoryUsage::eGpuOnly;
-        allocationCI.requiredFlags = vk::MemoryPropertyFlagBits::eDeviceLocal;
+        VmaAllocationCreateInfo allocationCI;
+        allocationCI.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+        allocationCI.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
-        vk_check(
-            allocator.createImage(&imageCI, &allocationCI, &depthImage.handle, &depthImage.allocation, nullptr),
-            "Failed to create image"
-        );
+        vmaCreateImage(allocator, &imageCI, &allocationCI, &depthImage.handle, &depthImage.allocation, nullptr);
 
-        vk::ComponentMapping components {
-            vk::ComponentSwizzle::eIdentity,
-            vk::ComponentSwizzle::eIdentity,
-            vk::ComponentSwizzle::eIdentity,
-            vk::ComponentSwizzle::eIdentity
-        };
-
-        vk::ImageSubresourceRange subresourceRange(vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1);
+        VkImageSubresourceRange subresourceRange{};
         subresourceRange.baseMipLevel = 0;
         subresourceRange.levelCount = 1;
         subresourceRange.baseArrayLayer = 0;
         subresourceRange.layerCount = 1;
-        subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
+        subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 
-        vk::ImageViewCreateInfo imageViewCI;
+        VkImageViewCreateInfo imageViewCI{.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .pNext = nullptr};
         imageViewCI.image = depthImage.handle;
-        imageViewCI.viewType = vk::ImageViewType::e2D;
-        imageViewCI.format = vk::Format::eD32Sfloat;
-        imageViewCI.components = components;
+        imageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        imageViewCI.format = VK_FORMAT_D32_SFLOAT;
         imageViewCI.subresourceRange = subresourceRange;
 
-        vk_check(
-            handle.createImageView(&imageViewCI, nullptr, &depthImage.view),
-            "Failed to create image view"
-        );
+        vkCreateImageView(handle, &imageViewCI, nullptr, &depthImage.view);
     }
 
     void Device::init_instance() {
@@ -483,8 +453,12 @@ namespace vulkan {
         if (enableValidationLayers) {
             instanceCI.enabledLayerCount = static_cast<u32>(validationLayers.size());
             instanceCI.ppEnabledLayerNames = validationLayers.data();
-
-            populate_debug_messenger_CI(debugCI);
+            debugCI.messageSeverity =
+                    vk::DebugUtilsMessageSeverityFlagBitsEXT::eError | vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning;
+            debugCI.messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+                                      vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
+                                      vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation;
+            debugCI.pfnUserCallback = debugMessageFunc;
         }
 
         vk_check(
@@ -495,18 +469,6 @@ namespace vulkan {
 
     void Device::init_debug_messenger() {
         if (!enableValidationLayers) return;
-
-        vk::DebugUtilsMessengerCreateInfoEXT messengerCI;
-        populate_debug_messenger_CI(messengerCI);
-
-        vk_check(
-            CreateDebugUtilsMessengerEXT(
-                instance,
-                (VkDebugUtilsMessengerCreateInfoEXT*)&messengerCI,
-                nullptr,
-                (VkDebugUtilsMessengerEXT*)&debugMessenger),
-            "Failed to set up debug messenger"
-        );
     }
 
     void Device::init_window() {
@@ -527,9 +489,7 @@ namespace vulkan {
     }
 
     void Device::init_surface() {
-        vk_check(glfwCreateWindowSurface(instance, window, nullptr, reinterpret_cast<VkSurfaceKHR*>(&surface)),
-            "Failed to create window surface"
-        );
+        glfwCreateWindowSurface(instance, window, nullptr, reinterpret_cast<VkSurfaceKHR*>(&surface));
     }
 
     void Device::select_gpu() {
@@ -541,7 +501,7 @@ namespace vulkan {
 
         if (gpuCount == 0) throw std::runtime_error("Failed to find suitable GPU");
 
-        eastl::vector<vk::PhysicalDevice> gpus(gpuCount);
+        std::vector<vk::PhysicalDevice> gpus(gpuCount);
 
         vk_check(
             instance.enumeratePhysicalDevices(&gpuCount, gpus.data()),
@@ -563,8 +523,8 @@ namespace vulkan {
     void Device::init_device() {
         QueueFamilyIndices indices = find_queue_families(gpu);
 
-        eastl::vector<vk::DeviceQueueCreateInfo> queueCIs;
-        eastl::set<u32> uniqueQueueFamilies = {indices.graphicsFamily.value(), indices.presentFamily.value()};
+        std::vector<vk::DeviceQueueCreateInfo> queueCIs;
+        std::set<u32> uniqueQueueFamilies = {indices.graphicsFamily.value(), indices.presentFamily.value()};
 
         f32 queuePriority = 1.0f;
         for (u32 queueFamily : uniqueQueueFamilies) {
@@ -720,11 +680,11 @@ namespace vulkan {
         }
     }
 
-    eastl::vector<const char*> Device::get_required_extensions() {
+    std::vector<const char*> Device::get_required_extensions() {
         u32 glfwExtensionCount = 0;
         const char **glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-        eastl::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+        std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
 
         if (enableValidationLayers) extensions.push_back(vk::EXTDebugUtilsExtensionName);
 
@@ -788,7 +748,7 @@ namespace vulkan {
 
 
 
-        eastl::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
+        std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
 
         std::cout << "Required Extensions:" << std::endl;
         for (const auto& extension : requiredExtensions) {
@@ -846,7 +806,7 @@ namespace vulkan {
         return details;
     }
 
-    vk::SurfaceFormatKHR Device::choose_swap_surface_format(const eastl::vector<vk::SurfaceFormatKHR> &availableFormats) {
+    vk::SurfaceFormatKHR Device::choose_swap_surface_format(const std::vector<vk::SurfaceFormatKHR> &availableFormats) {
         for (const auto& format : availableFormats) {
             if (format.format == vk::Format::eB8G8R8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
                 return format;
@@ -856,7 +816,7 @@ namespace vulkan {
         return availableFormats[0];
     }
 
-    vk::PresentModeKHR Device::choose_swap_present_mode(const eastl::vector<vk::PresentModeKHR> &availablePresentModes) {
+    vk::PresentModeKHR Device::choose_swap_present_mode(const std::vector<vk::PresentModeKHR> &availablePresentModes) {
         for (const auto& mode : availablePresentModes) {
             if (mode == vk::PresentModeKHR::eMailbox) {
                 return mode;
@@ -871,46 +831,23 @@ namespace vulkan {
         i32 width, height;
         glfwGetFramebufferSize(window, &width, &height);
 
-        vk::Extent2D actualExtent {
-            static_cast<u32>(width),
-            static_cast<u32>(height)
+        vk::Extent2D actualExtent{
+                static_cast<u32>(width),
+                static_cast<u32>(height)
         };
 
         actualExtent.width = std::clamp(
-            actualExtent.width,
-            capabilities.minImageExtent.width,
-            capabilities.maxImageExtent.width
-            );
+                actualExtent.width,
+                capabilities.minImageExtent.width,
+                capabilities.maxImageExtent.width
+        );
 
         actualExtent.height = std::clamp(
-            actualExtent.height,
-            capabilities.minImageExtent.height,
-            capabilities.maxImageExtent.height
-            );
+                actualExtent.height,
+                capabilities.minImageExtent.height,
+                capabilities.maxImageExtent.height
+        );
 
         return actualExtent;
-    }
-
-    void populate_debug_messenger_CI(vk::DebugUtilsMessengerCreateInfoEXT &debugMessengerCI) {
-        debugMessengerCI.messageSeverity =
-            vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose | vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning
-        | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError;
-        debugMessengerCI.messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
-            vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
-                vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
-            vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding;
-        debugMessengerCI.pfnUserCallback = debugCallback;
-    }
-
-    VkResult CreateDebugUtilsMessengerEXT(
-        VkInstance instance,
-        const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
-        const VkAllocationCallbacks* pAllocator,
-        VkDebugUtilsMessengerEXT* pDebugMessenger) {
-        auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-        if (func != nullptr) {
-            return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
-        }
-        return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
 }

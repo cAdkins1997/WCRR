@@ -5,24 +5,24 @@ void PipelineBuilder::clear() {
     shaderStages.clear();
 }
 
-vk::Pipeline PipelineBuilder::build_pipeline(vk::Device device) {
-    vk::PipelineViewportStateCreateInfo viewportState;
+VkPipeline PipelineBuilder::build_pipeline(VkDevice device) {
+    VkPipelineViewportStateCreateInfo viewportState{.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
     viewportState.viewportCount = 1;
     viewportState.scissorCount = 1;
 
-    vk::PipelineColorBlendStateCreateInfo colorBlending;
-    colorBlending.logicOpEnable = vk::False;
-
-    colorBlending.logicOp = vk::LogicOp::eCopy;
+    VkPipelineColorBlendStateCreateInfo colorBlending{};
+    colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlending.pNext = nullptr;
+    colorBlending.logicOpEnable = VK_FALSE;
+    colorBlending.logicOp = VK_LOGIC_OP_COPY;
     colorBlending.attachmentCount = 1;
     colorBlending.pAttachments = &colorBlendAttachment;
 
+    VkPipelineVertexInputStateCreateInfo vertexInputCI{.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
 
-    vk::PipelineVertexInputStateCreateInfo vertexInputCI;
-
-    vk::GraphicsPipelineCreateInfo pipelineCI;
+    VkGraphicsPipelineCreateInfo pipelineCI{.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
     pipelineCI.pNext = &renderInfo;
-    pipelineCI.stageCount = static_cast<uint32_t>(shaderStages.size());
+    pipelineCI.stageCount = static_cast<u32>(shaderStages.size());
     pipelineCI.pStages = shaderStages.data();
     pipelineCI.pVertexInputState = &vertexInputCI;
     pipelineCI.pInputAssemblyState = &inputAssembly;
@@ -33,113 +33,114 @@ vk::Pipeline PipelineBuilder::build_pipeline(vk::Device device) {
     pipelineCI.pDepthStencilState = &depthStencil;
     pipelineCI.layout = pipelineLayout;
 
-    vk::DynamicState state[]{ vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-    vk::PipelineDynamicStateCreateInfo dynamicInfo;
+    VkDynamicState state[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    VkPipelineDynamicStateCreateInfo dynamicInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
     dynamicInfo.pDynamicStates = &state[0];
     dynamicInfo.dynamicStateCount = 2;
     pipelineCI.pDynamicState = &dynamicInfo;
 
-    return device.createGraphicsPipeline(VK_NULL_HANDLE, pipelineCI).value;
+    VkPipeline newPipeline;
+    vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineCI,nullptr, &newPipeline);
+    return newPipeline;
 }
 
-void PipelineBuilder::set_shader(vk::ShaderModule vertexShader, vk::ShaderModule fragmentShader) {
+void PipelineBuilder::set_shader(VkShaderModule vertexShader, VkShaderModule fragmentShader) {
     shaderStages.clear();
-    shaderStages.push_back(vk::PipelineShaderStageCreateInfo({}, vk::ShaderStageFlagBits::eFragment, fragmentShader, "main"));
-    shaderStages.push_back(vk::PipelineShaderStageCreateInfo({}, vk::ShaderStageFlagBits::eVertex, vertexShader, "main"));
+    shaderStages.push_back(VkPipelineShaderStageCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .pNext = nullptr,
+            .stage = VK_SHADER_STAGE_VERTEX_BIT,
+            .module = vertexShader,
+            .pName = "main",
+    });
+    shaderStages.push_back(VkPipelineShaderStageCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .pNext = nullptr,
+            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+            .module = fragmentShader,
+            .pName = "main",
+    });
 }
 
-void PipelineBuilder::set_shader(
-    vk::ShaderModule taskShader,
-    vk::ShaderModule meshShader,
-    vk::ShaderModule fragmentShader)
-{
-    shaderStages.clear();
-    shaderStages.push_back(vk::PipelineShaderStageCreateInfo({}, vk::ShaderStageFlagBits::eTaskEXT, taskShader, "main"));
-    shaderStages.push_back(vk::PipelineShaderStageCreateInfo({}, vk::ShaderStageFlagBits::eMeshEXT, meshShader, "main"));
-    shaderStages.push_back(vk::PipelineShaderStageCreateInfo({}, vk::ShaderStageFlagBits::eFragment, fragmentShader, "main"));
-}
-
-void PipelineBuilder::set_input_topology(vk::PrimitiveTopology topology) {
+void PipelineBuilder::set_input_topology(VkPrimitiveTopology topology) {
     inputAssembly.topology = topology;
-    inputAssembly.primitiveRestartEnable = vk::False;
+    inputAssembly.primitiveRestartEnable = VK_FALSE;
 }
 
-void PipelineBuilder::set_polygon_mode(vk::PolygonMode mode) {
+void PipelineBuilder::set_polygon_mode(VkPolygonMode mode) {
     rasterizer.polygonMode = mode;
     rasterizer.lineWidth = 1.f;
 }
 
-void PipelineBuilder::set_cull_mode(vk::CullModeFlags cullMode, vk::FrontFace frontFace) {
+void PipelineBuilder::set_cull_mode(VkCullModeFlags cullMode, VkFrontFace frontFace) {
     rasterizer.cullMode = cullMode;
     rasterizer.frontFace = frontFace;
 }
 
 void PipelineBuilder::set_multisampling_none() {
-    multisampling.sampleShadingEnable = vk::False;
-    multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+    multisampling.sampleShadingEnable = VK_FALSE;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
     multisampling.minSampleShading = 1.0f;
     multisampling.pSampleMask = nullptr;
-    multisampling.alphaToCoverageEnable = vk::False;
-    multisampling.alphaToOneEnable = vk::False;
+    multisampling.alphaToCoverageEnable = VK_FALSE;
+    multisampling.alphaToOneEnable = VK_FALSE;
 }
 
-void PipelineBuilder::set_color_attachment_format(vk::Format format) {
-    colorAttachmentformat = format;
+void PipelineBuilder::set_color_attachment_format(VkFormat format) {
+    colorAttachmentformat = static_cast<VkFormat>(format);
     renderInfo.colorAttachmentCount = 1;
     renderInfo.pColorAttachmentFormats = &colorAttachmentformat;
 }
 
-void PipelineBuilder::set_depth_format(vk::Format format) {
-    renderInfo.depthAttachmentFormat = format;
+void PipelineBuilder::set_depth_format(VkFormat format) {
+    renderInfo.depthAttachmentFormat = static_cast<VkFormat>(format);
 }
 
-void PipelineBuilder::enable_depthtest(vk::Bool32 depthWriteEnable, vk::CompareOp op) {
-    depthStencil.depthTestEnable = vk::True;
+void PipelineBuilder::enable_depthtest(VkBool32 depthWriteEnable, VkCompareOp op) {
+    depthStencil.depthTestEnable = VK_TRUE;
     depthStencil.depthWriteEnable = depthWriteEnable;
     depthStencil.depthCompareOp = op;
-    depthStencil.depthBoundsTestEnable = vk::False;
-    depthStencil.stencilTestEnable = vk::False;
+    depthStencil.depthBoundsTestEnable = VK_FALSE;
+    depthStencil.stencilTestEnable = VK_FALSE;
     depthStencil.minDepthBounds = 0.f;
     depthStencil.maxDepthBounds = 1.f;
 }
 
 void PipelineBuilder::disable_depthtest() {
-    depthStencil.depthTestEnable = vk::False;
-    depthStencil.depthWriteEnable = vk::False;
-    depthStencil.depthCompareOp = vk::CompareOp::eNever;
-    depthStencil.depthBoundsTestEnable = vk::False;
-    depthStencil.stencilTestEnable = vk::False;
+    depthStencil.depthTestEnable = VK_FALSE;
+    depthStencil.depthWriteEnable = VK_FALSE;
+    depthStencil.depthCompareOp = VK_COMPARE_OP_NEVER;
+    depthStencil.depthBoundsTestEnable = VK_FALSE;
+    depthStencil.stencilTestEnable = VK_FALSE;
     depthStencil.minDepthBounds = 0.f;
     depthStencil.maxDepthBounds = 1.f;
 }
 
 void PipelineBuilder::enable_blending_additive() {
-    vk::ColorComponentFlags colorComponent = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-    colorBlendAttachment.colorWriteMask = colorComponent;
+    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
     colorBlendAttachment.blendEnable = VK_TRUE;
-    colorBlendAttachment.srcColorBlendFactor = vk::BlendFactor::eSrc1Alpha;
-    colorBlendAttachment.dstColorBlendFactor = vk::BlendFactor::eOne;
-    colorBlendAttachment.colorBlendOp = vk::BlendOp::eAdd;
-    colorBlendAttachment.srcAlphaBlendFactor = vk::BlendFactor::eOne;
-    colorBlendAttachment.dstAlphaBlendFactor = vk::BlendFactor::eZero;
-    colorBlendAttachment.alphaBlendOp = vk::BlendOp::eAdd;
+    colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+    colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
 }
 
 void PipelineBuilder::enable_blending_alphablend() {
-    vk::ColorComponentFlags colorComponent = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-    colorBlendAttachment.colorWriteMask = colorComponent;
+    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
     colorBlendAttachment.blendEnable = VK_TRUE;
-    colorBlendAttachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
-    colorBlendAttachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-    colorBlendAttachment.colorBlendOp = vk::BlendOp::eAdd;
-    colorBlendAttachment.srcAlphaBlendFactor = vk::BlendFactor::eOne;
-    colorBlendAttachment.dstAlphaBlendFactor = vk::BlendFactor::eZero;
-    colorBlendAttachment.alphaBlendOp = vk::BlendOp::eAdd;
+    colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+    colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
 }
 
 void PipelineBuilder::disable_blending() {
-    colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-    colorBlendAttachment.blendEnable = vk::False;
+    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    colorBlendAttachment.blendEnable = VK_FALSE;
 }
 
 

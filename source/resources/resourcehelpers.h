@@ -27,8 +27,8 @@ namespace vulkan {
         std::is_enum<T>::type;
     };
 
-    [[nodiscard]] Buffer make_staging_buffer(u64 allocSize, vma::Allocator allocator);
-    [[nodiscard]] Buffer create_device_buffer(u64 size, vk::BufferUsageFlags bufferUsage, vma::Allocator allocator);
+    [[nodiscard]] Buffer make_staging_buffer(u64 allocSize, VmaAllocator allocator);
+    [[nodiscard]] Buffer create_device_buffer(u64 size, VkBufferUsageFlags bufferUsage, VmaAllocator allocator);
     void copy_buffer(vk::CommandBuffer cmd, const Buffer &bufferSrc, const Buffer &bufferDst, vk::DeviceSize srcOffset, vk::DeviceSize dstOffset, vk::DeviceSize dataSize);
     void buffer_barrier(
     vk::CommandBuffer cmd,

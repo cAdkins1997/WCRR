@@ -1,4 +1,5 @@
 #pragma once
+#include "debug.h"
 #include "../commands.h"
 #include "../pipelines/descriptors.h"
 #include "../resources/scenemanager.h"
@@ -6,8 +7,7 @@
 
 #include <filesystem>
 #include <fstream>
-#include <EASTL/set.h>
-#include <EASTL/optional.h>
+#include <set>
 #include <GLFW/glfw3.h>
 #include <cmath>
 #include <functional>
@@ -38,7 +38,7 @@ namespace vulkan {
     constexpr bool enableValidationLayers = true;
 #endif
 
-    const eastl::vector deviceExtensions = {
+    const std::vector deviceExtensions = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
         VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
         VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
@@ -46,24 +46,11 @@ namespace vulkan {
         //VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME
     };
 
-    void populate_debug_messenger_CI(vk::DebugUtilsMessengerCreateInfoEXT& debugMessengerCI);
-    VkResult CreateDebugUtilsMessengerEXT(
-        VkInstance instance,
-        const VkDebugUtilsMessengerCreateInfoEXT* debugCI,
-        const VkAllocationCallbacks* allocator,
-        VkDebugUtilsMessengerEXT* debugMessenger);
-
-    static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) {
-        std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
-
-        return VK_FALSE;
-    }
-
     struct QueueFamilyIndices {
-        eastl::optional<u32> graphicsFamily;
-        eastl::optional<u32> presentFamily;
-        eastl::optional<u32> computeFamily;
-        eastl::optional<u32> transferFamily;
+        std::optional<u32> graphicsFamily;
+        std::optional<u32> presentFamily;
+        std::optional<u32> computeFamily;
+        std::optional<u32> transferFamily;
 
         [[nodiscard]] bool is_complete() const {
             return graphicsFamily.has_value() && presentFamily.has_value() && computeFamily.has_value() && transferFamily.has_value();
@@ -72,13 +59,13 @@ namespace vulkan {
 
     struct SwapChainSupportDetails {
         vk::SurfaceCapabilitiesKHR capabilities;
-        eastl::vector<vk::SurfaceFormatKHR> formats;
-        eastl::vector<vk::PresentModeKHR> presentModes;
+        std::vector<vk::SurfaceFormatKHR> formats;
+        std::vector<vk::PresentModeKHR> presentModes;
     };
 
     class Device {
     public:
-        Device(eastl::string_view appName, u32 _width, u32 _height, u32 countFramesInFlight);
+        Device(std::string_view appName, u32 _width, u32 _height);
         ~Device();
 
         [[nodiscard]] vk::Device get_handle() const { return handle; }
@@ -90,11 +77,11 @@ namespace vulkan {
         [[nodiscard]] Buffer create_buffer(
             size_t allocationSize,
             vk::BufferUsageFlags usage,
-            vma::MemoryUsage memoryUsage,
-            vma::AllocationCreateFlags flags = vma::AllocationCreateFlagBits::eMapped) const;
-        [[nodiscard]] Image create_image(vk::Extent3D size, vk::Format format, vk::ImageUsageFlags usage, u32 mipLevels, bool mipmapped) const;
+            VmaMemoryUsage memoryUsage,
+            VmaAllocationCreateFlags flags = VmaAllocationCreateFlagBits::VMA_ALLOCATION_CREATE_MAPPED_BIT) const;
+        [[nodiscard]] Image create_image(vk::Extent3D size, VkFormat format, VkImageUsageFlags usage, u32 mipLevels, bool mipmapped) const;
         [[nodiscard]] Sampler create_sampler(vk::Filter minFilter, vk::Filter magFilter, vk::SamplerMipmapMode mipmapMode) const;
-        [[nodiscard]] Shader create_shader(eastl::string_view filePath) const;
+        [[nodiscard]] Shader create_shader(std::string_view filePath) const;
 
         void submit_graphics_work(const GraphicsContext& context, vk::PipelineStageFlagBits2 wait, vk::PipelineStageFlagBits2 signal);
         void submit_compute_work(const ComputeContext& context, vk::PipelineStageFlagBits2 wait, vk::PipelineStageFlagBits2 signal);
@@ -116,7 +103,7 @@ namespace vulkan {
         [[nodiscard]] u32 get_width() const { return width; }
         [[nodiscard]] u32 get_height() const { return height; }
 
-        [[nodiscard]] vma::Allocator &get_allocator() { return allocator; }
+        [[nodiscard]] VmaAllocator &get_allocator() { return allocator; }
         u32 get_swapchain_image_index();
 
     public:
@@ -139,13 +126,13 @@ namespace vulkan {
         void init_depth_images();
 
     private:
-        eastl::vector<const char*> get_required_extensions();
+        std::vector<const char*> get_required_extensions();
         bool gpu_is_suitable(vk::PhysicalDevice gpu);
         [[nodiscard]] QueueFamilyIndices find_queue_families(vk::PhysicalDevice gpu) const;
         bool check_device_extension_support(vk::PhysicalDevice gpu);
         SwapChainSupportDetails query_swapchain_support(vk::PhysicalDevice gpu);
-        vk::SurfaceFormatKHR choose_swap_surface_format(const eastl::vector<vk::SurfaceFormatKHR>& availableFormats);
-        vk::PresentModeKHR choose_swap_present_mode(const eastl::vector<vk::PresentModeKHR>& availablePresentModes);
+        vk::SurfaceFormatKHR choose_swap_surface_format(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
+        vk::PresentModeKHR choose_swap_present_mode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
         vk::Extent2D choose_swap_extent(const vk::SurfaceCapabilitiesKHR& capabilities);
 
     private:
@@ -157,8 +144,6 @@ namespace vulkan {
 
         vk::Device handle;
         vk::PhysicalDevice gpu;
-
-        u32 MAX_FRAMES_IN_FLIGHT;
 
     public:
         bool resizeRequested = false;
@@ -184,6 +169,6 @@ namespace vulkan {
         u32 graphicsQueueIndex{}, computeQueueIndex{}, presentQueueIndex{}, transferQueueIndex{};
         vk::Queue graphicsQueue, computeQueue, presentQueue, transferQueue;
 
-        vma::Allocator allocator{};
+        VmaAllocator allocator{};
     };
 }

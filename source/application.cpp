@@ -106,8 +106,8 @@ void Application::draw() {
     uploadContext.update_uniform(&sceneData, sizeof(SceneData), sceneDataBuffer);
 
     vulkan::GraphicsContext graphicsContext(commandBuffer);
-    graphicsContext.image_barrier(drawHandle, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
-    graphicsContext.image_barrier(depthHandle, vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthAttachmentOptimal);
+    graphicsContext.image_barrier(drawImage.handle, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
+    graphicsContext.image_barrier(depthImage.handle, vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthAttachmentOptimal);
 
     vk::Extent2D extent = {drawImage.extent.width, drawImage.extent.height};
 
@@ -120,7 +120,7 @@ void Application::draw() {
 
     graphicsContext._commandBuffer.endRendering();
 
-    graphicsContext.image_barrier(drawHandle, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eTransferSrcOptimal);
+    graphicsContext.image_barrier(drawImage.handle, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eTransferSrcOptimal);
     graphicsContext.image_barrier(currentSwapchainImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
     graphicsContext.copy_image(drawImage.handle, currentSwapchainImage, drawImage.extent, device.get_swapchain_extent());
     graphicsContext.image_barrier(currentSwapchainImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::ePresentSrcKHR);
@@ -135,7 +135,6 @@ void Application::init() {
     init_scene_resources();
     init_descriptors();
     init_opaque_pipeline();
-    init_transparent_pipeline();
 }
 
 void Application::update() const {
@@ -176,12 +175,12 @@ void Application::init_opaque_pipeline() {
     PipelineBuilder pipelineBuilder;
     pipelineBuilder.pipelineLayout = opaquePipeline.pipelineLayout;
     pipelineBuilder.set_shader(vertShader.module, fragShader.module);
-    pipelineBuilder.set_input_topology(vk::PrimitiveTopology::eTriangleList);
-    pipelineBuilder.set_polygon_mode(vk::PolygonMode::eFill);
+    pipelineBuilder.set_input_topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+    pipelineBuilder.set_polygon_mode(VK_POLYGON_MODE_FILL);
 
-    pipelineBuilder.set_cull_mode(vk::CullModeFlagBits::eNone, vk::FrontFace::eClockwise);
+    pipelineBuilder.set_cull_mode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
     pipelineBuilder.set_multisampling_none();
-    pipelineBuilder.enable_depthtest(vk::True, vk::CompareOp::eGreaterOrEqual);
+    pipelineBuilder.enable_depthtest(vk::True, VK_COMPARE_OP_GREATER_OR_EQUAL);
     pipelineBuilder.disable_blending();
     pipelineBuilder.set_color_attachment_format(drawImage.format);
     pipelineBuilder.set_depth_format(depthImage.format);
@@ -190,15 +189,17 @@ void Application::init_opaque_pipeline() {
     device.get_handle().destroyShaderModule(vertShader.module);
     device.get_handle().destroyShaderModule(fragShader.module);
 
+    drawAttachment = VkRenderingAttachmentInfo{.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO, .pNext = nullptr};
     drawAttachment.imageView = drawImage.view;
-    drawAttachment.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
-    drawAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-    drawAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+    drawAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    drawAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    drawAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 
+    depthAttachment = VkRenderingAttachmentInfo{.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO, .pNext = nullptr};
     depthAttachment.imageView = depthImage.view;
-    depthAttachment.imageLayout = vk::ImageLayout::eDepthAttachmentOptimal;
-    depthAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-    depthAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+    depthAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+    drawAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    drawAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     depthAttachment.clearValue.depthStencil.depth = 0.f;
 }
 
@@ -209,10 +210,10 @@ void Application::init_transparent_pipeline() {
     PipelineBuilder pipelineBuilder;
     pipelineBuilder.pipelineLayout = transparentPipeline.pipelineLayout;
     pipelineBuilder.set_shader(vertexShader.module, fragShader.module);
-    pipelineBuilder.set_input_topology(vk::PrimitiveTopology::eTriangleList);
-    pipelineBuilder.set_polygon_mode(vk::PolygonMode::eFill);
+    pipelineBuilder.set_input_topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+    pipelineBuilder.set_polygon_mode(VK_POLYGON_MODE_FILL);
     pipelineBuilder.set_multisampling_none();
-    pipelineBuilder.enable_depthtest(vk::True, vk::CompareOp::eAlways);
+    pipelineBuilder.enable_depthtest(vk::True, VK_COMPARE_OP_ALWAYS);
     pipelineBuilder.enable_blending_alphablend();
     pipelineBuilder.set_color_attachment_format(drawImage.format);
     pipelineBuilder.set_depth_format(depthImage.format);
@@ -220,36 +221,23 @@ void Application::init_transparent_pipeline() {
 
     device.get_handle().destroyShaderModule(vertexShader.module);
     device.get_handle().destroyShaderModule(fragShader.module);
-
-    drawAttachment.imageView = drawImage.view;
-    drawAttachment.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
-    drawAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-    drawAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-
-    depthAttachment.imageView = depthImage.view;
-    depthAttachment.imageLayout = vk::ImageLayout::eDepthAttachmentOptimal;
-    depthAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-    depthAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-    depthAttachment.clearValue.depthStencil.depth = 0.f;
 }
 
 void Application::init_scene_resources() {
     vk_check(device.get_handle().resetFences(1, &device.immediateFence), "failed to reset immediate fence");
     drawImage = device.get_draw_image();
-    drawHandle = drawImage.handle;
     drawImageExtent.height = drawImage.extent.height;
     drawImageExtent.width = drawImage.extent.width;
 
     depthImage = device.get_depth_image();
-    depthHandle = depthImage.handle;
 
     sceneDataBuffer = device.create_buffer(
         sizeof(SceneData),
         vk::BufferUsageFlagBits::eUniformBuffer | vk::BufferUsageFlagBits::eTransferDst,
-        vma::MemoryUsage::eAuto,
-        vma::AllocationCreateFlagBits::eHostAccessSequentialWrite |
-        vma::AllocationCreateFlagBits::eHostAccessAllowTransferInstead|
-        vma::AllocationCreateFlagBits::eMapped
+        VMA_MEMORY_USAGE_AUTO,
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT |
+        VMA_ALLOCATION_CREATE_MAPPED_BIT
         );
 
     if (auto gltf = sceneManager->load_gltf("../assets/NewSponza_Main_glTF_003.gltf"); gltf.has_value()) {

@@ -2,12 +2,8 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_to_string.hpp>
-#include <vulkan/vk_enum_string_helper.h>
 #include <vk_mem_alloc.h>
-#include <vulkan-memory-allocator-hpp/vk_mem_alloc.hpp>
 #include <print>
-#include <EASTL/vector.h>
-#include <EASTL/string.h>
 
 typedef uint8_t u8;
 typedef int8_t i8;
@@ -22,8 +18,8 @@ typedef float f32;
 typedef double f64;
 
 void vk_check(vk::Result result, const std::string& outputString);
-void vk_check(VkResult result, const std::string& outputString);
 
+#ifdef WIN32
 #if defined(min)
 #undef min
 #endif
@@ -39,6 +35,8 @@ void vk_check(VkResult result, const std::string& outputString);
 #include <d3dcompiler.h>
 #include <wrl.h>
 #include <shellapi.h>
+
+void vk_check(VkResult result, const std::string& outputString);
 
 void* __cdecl operator new[](size_t size, const char* name, int flags, unsigned debugFlags, const char* file, int line);
 
@@ -58,3 +56,5 @@ namespace D3D {
         const HRESULT m_hr;
     };
 }
+
+#endif

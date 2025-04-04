@@ -69,7 +69,7 @@ namespace vulkan  {
         materialBuffer = device.create_buffer(
             sizeof(Material) * asset.materials.size(),
             vk::BufferUsageFlagBits::eUniformBuffer | vk::BufferUsageFlagBits::eTransferDst,
-            vma::MemoryUsage::eCpuToGpu
+            VMA_MEMORY_USAGE_CPU_TO_GPU
             );
 
         for (const auto& material : asset.materials) {
@@ -86,7 +86,7 @@ namespace vulkan  {
                 vk::BufferUsageFlagBits::eStorageBuffer |
                 vk::BufferUsageFlagBits::eShaderDeviceAddress |
                 vk::BufferUsageFlagBits::eTransferDst,
-                vma::MemoryUsage::eCpuToGpu
+                VMA_MEMORY_USAGE_CPU_TO_GPU
                 );
 
             materialBufferSize = size * sizeof(GPUMaterial);

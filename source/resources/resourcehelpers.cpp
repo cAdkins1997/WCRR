@@ -2,41 +2,46 @@
 #include "resourcehelpers.h"
 
 namespace vulkan {
-    Buffer make_staging_buffer(u64 allocSize, vma::Allocator allocator) {
-        vk::BufferCreateInfo bufferInfo;
+    Buffer make_staging_buffer(u64 allocSize, VmaAllocator allocator) {
+        VkBufferCreateInfo bufferInfo{.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
         bufferInfo.pNext = nullptr;
         bufferInfo.size = allocSize;
-        bufferInfo.usage = vk::BufferUsageFlagBits::eTransferSrc;
+        bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
-        vma::AllocationCreateFlags allocationFlags = vma::AllocationCreateFlagBits::eHostAccessSequentialWrite | vma::AllocationCreateFlagBits::eMapped;
-        vma::AllocationCreateInfo allocationCI;
+        VmaAllocationCreateFlags allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        VmaAllocationCreateInfo allocationCI{};
         allocationCI.flags = allocationFlags;
-        allocationCI.usage = vma::MemoryUsage::eAuto;
+        allocationCI.usage = VMA_MEMORY_USAGE_AUTO;
         Buffer newBuffer{};
 
-        vk_check(
-            allocator.createBuffer(&bufferInfo, &allocationCI, &newBuffer.handle, &newBuffer.allocation, &newBuffer.info),
-            "Failed to create staging buffer"
-            );
-
+        vmaCreateBuffer(
+                allocator,
+                &bufferInfo,
+                &allocationCI,
+                (VkBuffer*)&newBuffer.handle,
+                &newBuffer.allocation,
+                &newBuffer.info);
         return newBuffer;
     }
 
-    Buffer create_device_buffer(u64 size, vk::BufferUsageFlags bufferUsage, vma::Allocator allocator) {
-        vma::AllocationCreateInfo allocationCI;
-        allocationCI.usage = vma::MemoryUsage::eGpuOnly;
-        allocationCI.flags = vma::AllocationCreateFlagBits::eMapped;
+    Buffer create_device_buffer(u64 size, VkBufferUsageFlags bufferUsage, VmaAllocator allocator) {
+        VmaAllocationCreateInfo allocationCI{};
+        allocationCI.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+        allocationCI.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
-        vk::BufferCreateInfo deviceBufferInfo;
+        VkBufferCreateInfo deviceBufferInfo{.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
         deviceBufferInfo.pNext = nullptr;
         deviceBufferInfo.size = size;
         deviceBufferInfo.usage = bufferUsage;
 
         Buffer deviceBuffer{};
-        vk_check(
-            allocator.createBuffer(&deviceBufferInfo, &allocationCI, &deviceBuffer.handle, &deviceBuffer.allocation, &deviceBuffer.info),
-            "Failed to create upload context device buffer"
-            );
+        vmaCreateBuffer(
+                allocator,
+                &deviceBufferInfo,
+                &allocationCI,
+                &deviceBuffer.handle,
+                &deviceBuffer.allocation,
+                &deviceBuffer.info);
 
         return deviceBuffer;
     }

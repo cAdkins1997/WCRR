@@ -152,9 +152,9 @@ namespace vulkan {
         update_light_buffer();
 
         auto textureHandles = textureManager.create_textures(
-            vk::Format::eBc7SrgbBlock,
-            vk::ImageUsageFlagBits::eSampled,
-            asset
+                VK_FORMAT_BC7_SRGB_BLOCK,
+                VK_IMAGE_USAGE_SAMPLED_BIT,
+                asset
         );
 
         newScene.textures =  std::move(textureHandles);
@@ -162,20 +162,6 @@ namespace vulkan {
         for (const auto& texture : newScene.textures) {
             textureManager.set_texture_sampler(texture, newScene.samplers[0]);
         }
-
-        /*for (auto& gltfImage : asset.images) {
-
-            TextureHandle textureHandle = textureManager.create_texture(
-                vk::Format::eBc7SrgbBlock,
-                vk::ImageUsageFlagBits::eSampled,
-                gltfImage,
-                asset
-            );
-
-            newScene.textures.push_back(textureHandle);
-
-            textureManager.set_texture_sampler(textureHandle, newScene.samplers[0]);
-        }*/
 
         materialManager.build_material_buffer(asset.materials.size());
 
@@ -276,7 +262,7 @@ namespace vulkan {
                 vk::BufferUsageFlagBits::eStorageBuffer |
                 vk::BufferUsageFlagBits::eShaderDeviceAddress |
                 vk::BufferUsageFlagBits::eTransferDst,
-                vma::MemoryUsage::eCpuToGpu
+                VMA_MEMORY_USAGE_CPU_TO_GPU
                 );
 
             lightBufferSize = size * sizeof(GPULight);

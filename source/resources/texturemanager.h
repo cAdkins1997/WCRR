@@ -34,15 +34,16 @@ namespace vulkan {
         TextureManager(Device& _device, UploadContext& _context, u64 initialCount);
 
         TextureHandle create_texture(
-            vk::Format format,
-            vk::ImageUsageFlags usage,
+            VkFormat format,
+            VkImageUsageFlags usage,
             fastgltf::Image& fastgltfImage,
             fastgltf::Asset& asset
             );
 
-        std::vector<TextureHandle> create_textures(vk::Format format,
-            vk::ImageUsageFlags usage,
-            fastgltf::Asset& asset
+        std::vector<TextureHandle> create_textures(
+                VkFormat format,
+                VkImageUsageFlags usage,
+                fastgltf::Asset& asset
             );
 
         SamplerHandle create_sampler(const fastgltf::Sampler& fastgltfSampler);

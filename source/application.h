@@ -18,7 +18,7 @@ struct SceneData {
     glm::vec3 cameraPosition;
 };
 
-inline auto camera = vulkan::Camera(glm::vec3(0.0f, 0.0f, 3.0f), glm::vec3(0.0f, -1.0f, 0.0f),-90.0f, 0.0f);;
+inline auto camera = vulkan::Camera(glm::vec3(0.0f, -4.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f),-90.0f, 0.0f);;
 inline bool firstMouse = true;
 inline f32 lastX = 400, lastY = 300;
 
@@ -49,14 +49,12 @@ private:
     vulkan::Pipeline transparentPipeline;
 
     vulkan::Image drawImage;
-    VkImage drawHandle{};
+    vulkan::Image depthImage;
     vk::Extent2D drawImageExtent;
 
-    vulkan::Image depthImage;
-    VkImage depthHandle{};
 
-    vk::RenderingAttachmentInfo drawAttachment;
-    vk::RenderingAttachmentInfo depthAttachment;
+    VkRenderingAttachmentInfo drawAttachment;
+    VkRenderingAttachmentInfo depthAttachment;
 
 private:
     vulkan::Buffer sceneDataBuffer{};

@@ -125,35 +125,32 @@ namespace vulkan {
         const u64 vertexBufferSize = vertices.size() * sizeof(Vertex);
         const u64 indexBufferSize = indices.size() * sizeof(u32);
 
-        const vma::Allocator allocator = device.get_allocator();
+        const auto allocator = device.get_allocator();
 
-        constexpr vk::BufferUsageFlags vertexBufferFlags =
-            vk::BufferUsageFlagBits::eStorageBuffer |
-            vk::BufferUsageFlagBits::eTransferDst |
-                vk::BufferUsageFlagBits::eShaderDeviceAddress |
-                    vk::BufferUsageFlagBits::eVertexBuffer;
+        constexpr VkBufferUsageFlags vertexBufferFlags =
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
+                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 
         vertexBuffer.vertexBuffer = create_device_buffer(vertexBufferSize, vertexBufferFlags, allocator);
 
-        constexpr vk::BufferUsageFlags indexBufferFlags = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+        constexpr VkBufferUsageFlags indexBufferFlags = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
         vertexBuffer.indexBuffer = create_device_buffer(indexBufferSize, indexBufferFlags, allocator);
 
         const Buffer stagingBuffer = make_staging_buffer(vertexBufferSize + indexBufferSize, allocator);
 
         void* data = stagingBuffer.info.pMappedData;
 
-        vk_check(
-            allocator.mapMemory(stagingBuffer.allocation, &data),
-            "Failed to map staging buffer"
-            );
+        vmaMapMemory(allocator, stagingBuffer.allocation, &data);
         memcpy(data, vertices.data(), vertexBufferSize);
         memcpy(static_cast<char*>(data) + vertexBufferSize, indices.data(), indexBufferSize);
-        allocator.unmapMemory(stagingBuffer.allocation);
+        vmaUnmapMemory(allocator, stagingBuffer.allocation);
 
-        vk::BufferDeviceAddressInfo bdaInfo(vertexBuffer.vertexBuffer.handle);
+        VkBufferDeviceAddressInfo bdaInfo{.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO};
         bdaInfo.pNext = nullptr;
-        bdaInfo.setBuffer(vertexBuffer.vertexBuffer.handle);
-        vk::DeviceAddress bda = device.get_handle().getBufferAddress(bdaInfo);
+        bdaInfo.buffer = vertexBuffer.vertexBuffer.handle;
+        VkDeviceAddress bda = vkGetBufferDeviceAddress(device.get_handle(), &bdaInfo);
         vertexBuffer.vertexBufferAddress = bda;
 
         context.begin();

@@ -89,7 +89,7 @@ namespace vulkan {
     UploadContext::UploadContext(
         const vk::Device &device,
         vk::CommandBuffer &commandBuffer,
-        vma::Allocator &allocator) :
+        VmaAllocator &allocator) :
     _allocator(allocator) , _commandBuffer(commandBuffer), _device(device) {}
 
     void UploadContext::begin() const {
@@ -210,10 +210,11 @@ namespace vulkan {
     }
 
     void UploadContext::upload_uniform(void *data, u64 dataSize, Buffer &uniform) const {
-        auto propertyFlags = _allocator.getAllocationMemoryProperties(uniform.allocation);
-        if (propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible) {
+        VkMemoryPropertyFlags propertyFlags;
+        vmaGetAllocationMemoryProperties(_allocator, uniform.allocation, &propertyFlags);
+        if (propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
             memcpy(uniform.get_mapped_data(), data, dataSize);
-            _allocator.flushAllocation(uniform.allocation, 0, vk::WholeSize),
+            vmaFlushAllocation(_allocator, uniform.allocation, 0, VK_WHOLE_SIZE);
 
             buffer_barrier(
                 uniform,
@@ -227,7 +228,7 @@ namespace vulkan {
         else {
             Buffer stagingBuffer = make_staging_buffer(dataSize);
             memcpy(stagingBuffer.get_mapped_data(), data, dataSize);
-            _allocator.flushAllocation(uniform.allocation, 0, vk::WholeSize);
+            vmaFlushAllocation(_allocator, uniform.allocation, 0, VK_WHOLE_SIZE);
 
             buffer_barrier(
                 stagingBuffer,
@@ -262,24 +263,21 @@ namespace vulkan {
         bufferInfo.size = allocSize;
         bufferInfo.usage = vk::BufferUsageFlagBits::eTransferSrc;
 
-        vma::AllocationCreateFlags allocationFlags = vma::AllocationCreateFlagBits::eHostAccessSequentialWrite | vma::AllocationCreateFlagBits::eMapped;
-        vma::AllocationCreateInfo allocationCI;
+        VmaAllocationCreateFlags allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        VmaAllocationCreateInfo allocationCI;
         allocationCI.flags = allocationFlags;
-        allocationCI.usage = vma::MemoryUsage::eAuto;
+        allocationCI.usage = VMA_MEMORY_USAGE_AUTO;
         Buffer newBuffer{};
 
-        vk_check(
-            _allocator.createBuffer(&bufferInfo, &allocationCI, &newBuffer.handle, &newBuffer.allocation, &newBuffer.info),
-            "Failed to create staging buffer"
-            );
+        vmaCreateBuffer(_allocator, (VkBufferCreateInfo*)&bufferInfo, &allocationCI, (VkBuffer*)&newBuffer.handle, &newBuffer.allocation, &newBuffer.info);
 
         return newBuffer;
     }
 
     vulkan::Buffer UploadContext::create_device_buffer(size_t size, vk::BufferUsageFlags bufferUsage) const {
-        vma::AllocationCreateInfo allocationCI;
-        allocationCI.usage = vma::MemoryUsage::eGpuOnly;
-        allocationCI.flags = vma::AllocationCreateFlagBits::eMapped;
+        VmaAllocationCreateInfo allocationCI;
+        allocationCI.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+        allocationCI.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
         vk::BufferCreateInfo deviceBufferInfo;
         deviceBufferInfo.pNext = nullptr;
@@ -287,10 +285,7 @@ namespace vulkan {
         deviceBufferInfo.usage = bufferUsage;
 
         Buffer deviceBuffer{};
-        vk_check(
-            _allocator.createBuffer(&deviceBufferInfo, &allocationCI, &deviceBuffer.handle, &deviceBuffer.allocation, &deviceBuffer.info),
-            "Failed to create upload context device buffer"
-            );
+        vmaCreateBuffer(_allocator, (VkBufferCreateInfo*)&deviceBufferInfo, &allocationCI, (VkBuffer*)&deviceBuffer.handle, &deviceBuffer.allocation, &deviceBuffer.info);
 
         return deviceBuffer;
     }
@@ -301,7 +296,7 @@ namespace vulkan {
 
     void UploadContext::destroy_image(const Image &image) const {
         _device.destroyImageView(image.view);
-        _allocator.destroyImage(image.handle, image.allocation);
+        vmaDestroyImage(_allocator, (VkImage)image.handle, image.allocation);
     }
 
     GraphicsContext::GraphicsContext(vk::CommandBuffer& commandBuffer) : _commandBuffer(commandBuffer){}
@@ -410,18 +405,19 @@ namespace vulkan {
 
     void GraphicsContext::set_up_render_pass(
         vk::Extent2D extent,
-        const vk::RenderingAttachmentInfo *drawImage,
-        const vk::RenderingAttachmentInfo *depthImage
+        const VkRenderingAttachmentInfo* drawImage,
+        const VkRenderingAttachmentInfo* depthImage
         ) const {
         vk::Rect2D renderArea;
         renderArea.extent = extent;
-        vk::RenderingInfo renderInfo;
+        VkRenderingInfo renderInfo{.sType = VK_STRUCTURE_TYPE_RENDERING_INFO, .pNext = nullptr};
         renderInfo.renderArea = renderArea;
         renderInfo.pColorAttachments = drawImage;
         renderInfo.pDepthAttachment = depthImage;
         renderInfo.layerCount = 1;
         renderInfo.colorAttachmentCount = 1;
-        _commandBuffer.beginRendering(&renderInfo);
+
+        vkCmdBeginRendering(_commandBuffer, &renderInfo);
     }
 
     void GraphicsContext::end_render_pass() const {
@@ -471,7 +467,7 @@ namespace vulkan {
 
     void GraphicsContext::bind_vertex_buffer(const vulkan::Buffer &vertexBuffer) const {
         vk::DeviceSize offsets[] = {0};
-        _commandBuffer.bindVertexBuffers(0, vertexBuffer.handle, offsets);
+        _commandBuffer.bindVertexBuffers(0, (vk::Buffer)vertexBuffer.handle, offsets);
     }
 
     void GraphicsContext::set_push_constants(const void *pPushConstants, const u64 size, const vk::ShaderStageFlags shaderStage) const {

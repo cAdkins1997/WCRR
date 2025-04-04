@@ -11,30 +11,29 @@ public:
     PipelineBuilder() { clear(); }
 
     void clear();
-    vk::Pipeline build_pipeline(vk::Device device);
+    VkPipeline build_pipeline(VkDevice device);
 
-    void set_shader(vk::ShaderModule vertexShader, vk::ShaderModule fragmentShader);
-    void set_shader(vk::ShaderModule taskShader, vk::ShaderModule meshShader, vk::ShaderModule fragmentShader);
-    void set_input_topology(vk::PrimitiveTopology topology);
-    void set_polygon_mode(vk::PolygonMode mode);
-    void set_cull_mode(vk::CullModeFlags cullMode, vk::FrontFace frontFace);
+    void set_shader(VkShaderModule vertexShader, VkShaderModule fragmentShader);
+    void set_input_topology(VkPrimitiveTopology topology);
+    void set_polygon_mode(VkPolygonMode mode);
+    void set_cull_mode(VkCullModeFlags cullMode, VkFrontFace frontFace);
     void set_multisampling_none();
-    void set_color_attachment_format(vk::Format format);
-    void set_depth_format(vk::Format format);
-    void enable_depthtest(vk::Bool32 depthWriteEnable, vk::CompareOp op);
+    void set_color_attachment_format(VkFormat format);
+    void set_depth_format(VkFormat format);
+    void enable_depthtest(VkBool32 depthWriteEnable, VkCompareOp op);
     void disable_depthtest();
     void enable_blending_additive();
     void enable_blending_alphablend();
     void disable_blending();
 
-    std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
+    std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
 
-    vk::PipelineInputAssemblyStateCreateInfo inputAssembly;
-    vk::PipelineRasterizationStateCreateInfo rasterizer;
-    vk::PipelineColorBlendAttachmentState colorBlendAttachment;
-    vk::PipelineMultisampleStateCreateInfo multisampling;
-    vk::PipelineLayout pipelineLayout;
-    vk::PipelineDepthStencilStateCreateInfo depthStencil;
-    vk::PipelineRenderingCreateInfo renderInfo;
-    vk::Format colorAttachmentformat{};
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
+    VkPipelineRasterizationStateCreateInfo rasterizer{.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
+    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+    VkPipelineMultisampleStateCreateInfo multisampling{.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
+    VkPipelineLayout pipelineLayout{};
+    VkPipelineDepthStencilStateCreateInfo depthStencil{.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
+    VkPipelineRenderingCreateInfo renderInfo{.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
+    VkFormat colorAttachmentformat{};
 };

@@ -17,9 +17,9 @@ namespace vulkan {
     enum class LightHandle : u32 { Invalid = 0 };
 
     struct Buffer {
-        vk::Buffer handle;
-        vma::Allocation allocation;
-        vma::AllocationInfo info;
+        VkBuffer handle;
+        VmaAllocation allocation;
+        VmaAllocationInfo info;
         vk::MemoryPropertyFlags properties;
 
         void* get_mapped_data() { return info.pMappedData; }
@@ -34,21 +34,21 @@ namespace vulkan {
 
     struct Shader {
         vk::ShaderModule module;
-        eastl::string path;
+        std::string path;
         bool isCompute = false;
     };
 
     class Image {
     public:
-        vk::Image handle{};
-        vk::ImageView view{};
-        vma::Allocation allocation{};
-        vk::Extent3D extent{};
-        vk::Format format{};
+        VkImage handle{};
+        VkImageView view{};
+        VmaAllocation allocation{};
+        VkExtent3D extent{};
+        VkFormat format{};
         SamplerHandle sampler{};
-        u32 mipLevels;
-        u16 magicNumber;
+        u32 mipLevels{};
+        u16 magicNumber{};
 
-        [[nodiscard]] vma::Allocation get_allocation() const { return allocation; }
+        [[nodiscard]] VmaAllocation get_allocation() const { return allocation; }
     };
 }

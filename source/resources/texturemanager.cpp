@@ -7,8 +7,8 @@ namespace vulkan {
     }
 
     TextureHandle TextureManager::create_texture(
-        vk::Format format,
-        vk::ImageUsageFlags usage,
+        VkFormat format,
+        VkImageUsageFlags usage,
         fastgltf::Image& gltfImage,
         fastgltf::Asset& asset)
     {
@@ -64,7 +64,7 @@ namespace vulkan {
                         }
                     }
 
-                    newImage = device.create_image(extent, format, usage | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc, mipLevels, true);
+                    newImage = device.create_image(extent, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, mipLevels, true);
                     /*device.submit_immediate_work([&](vk::CommandBuffer cmd) {
                         UploadContext immediateContext(device.get_handle(), cmd, device.get_allocator());
                         image_barrier(newImage.handle, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
@@ -121,7 +121,7 @@ namespace vulkan {
                         }
                     }
 
-                    newImage = device.create_image(extent, format, usage | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc, mipLevels, true);
+                    newImage = device.create_image(extent, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, mipLevels, true);
                     /*device.submit_immediate_work([&](vk::CommandBuffer cmd) {
                         UploadContext immediateContext(device.get_handle(), cmd, device.get_allocator());
                         image_barrier(newImage.handle, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
@@ -189,7 +189,7 @@ namespace vulkan {
                                 }
                             }
 
-                            newImage = device.create_image(extent, format, usage | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc, mipLevels, true);
+                            newImage = device.create_image(extent, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, mipLevels, true);
                             /*device.submit_immediate_work([&](vk::CommandBuffer cmd) {
                                 UploadContext immediateContext(device.get_handle(), cmd, device.get_allocator());
                                 image_barrier(newImage.handle, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
@@ -217,8 +217,8 @@ namespace vulkan {
     }
 
     std::vector<TextureHandle> TextureManager::create_textures(
-        const vk::Format format,
-        const vk::ImageUsageFlags usage,
+        const VkFormat format,
+        const VkImageUsageFlags usage,
         fastgltf::Asset &asset)
     {
         std::vector<TextureHandle> handles;
@@ -260,7 +260,7 @@ namespace vulkan {
                     const ku32 mipLevels = texture->numLevels;
 
                     const vk::Extent3D extent { width, height, 1 };
-                    newImage = device.create_image(extent, format, usage | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc, mipLevels, true);
+                    newImage = device.create_image(extent, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, mipLevels, true);
                     images.push_back(newImage);
 
                     for (u32 i = 0; i < mipLevels; i++) {
@@ -302,7 +302,7 @@ namespace vulkan {
                 const ku32 mipLevels = texture->numLevels;
 
                 const vk::Extent3D extent {width, height, 1};
-                newImage = device.create_image(extent, format, usage | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc, mipLevels, true);
+                newImage = device.create_image(extent, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, mipLevels, true);
                 images.push_back(newImage);
 
                 stagingBufferSize += textureSize;
@@ -354,7 +354,7 @@ namespace vulkan {
                             const ku32 textureSize = texture->dataSize;
 
                             const vk::Extent3D extent {width, height, 1};
-                            newImage = device.create_image(extent, format, usage | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc, mipLevels, true);
+                            newImage = device.create_image(extent, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, mipLevels, true);
                             images.push_back(newImage);
 
                             const u64 dataSize = texture->dataSize;
@@ -397,11 +397,11 @@ namespace vulkan {
         std::vector<ku8> data;
         data.reserve(stagingBufferSize);
 
-        for (const auto& ktxTextureP : ktxTexturePs) {
-            const ku64 size = ktxTextureP->dataSize;
-            const ku8* textureData = ktxTextureP->pData;
-            for (u64 i = 0; i < size; i++) {
-                data.push_back(textureData[i]);
+        for (auto currentTexture : ktxTexturePs) {
+            const ku64 size = currentTexture->dataSize;
+            const ku8* textureData = currentTexture->pData;
+            for (u64 j = 0; j < size; j++) {
+                data.push_back(textureData[j]);
             }
         }
 
