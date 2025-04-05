@@ -52,7 +52,6 @@ private:
     vulkan::Image depthImage;
     vk::Extent2D drawImageExtent;
 
-
     VkRenderingAttachmentInfo drawAttachment;
     VkRenderingAttachmentInfo depthAttachment;
 
@@ -62,6 +61,8 @@ private:
 private:
     vulkan::Device& device;
     vulkan::SceneHandle testScene;
+
+    std::unique_ptr<vulkan::DescriptorBuilder> descriptorBuilder;
 
     std::unique_ptr<vulkan::SceneManager> sceneManager;
     std::unique_ptr<vulkan::TextureManager> textureManager;

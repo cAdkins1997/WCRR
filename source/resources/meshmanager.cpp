@@ -6,6 +6,13 @@ namespace vulkan {
         meshes.reserve(initialCount);
     }
 
+    void MeshManager::release_gpu_resources() {
+        for (auto& vertexBuffer : vertexBuffers) {
+            vmaDestroyBuffer(device.get_allocator(), vertexBuffer.vertexBuffer.handle, vertexBuffer.vertexBuffer.allocation);
+            vmaDestroyBuffer(device.get_allocator(), vertexBuffer.indexBuffer.handle, vertexBuffer.indexBuffer.allocation);
+        }
+    }
+
     MeshHandle MeshManager::create_mesh(const fastgltf::Mesh& gltfMesh, const VertexBuffer& vertexBuffer) {
         Mesh newMesh;
         newMesh.magicNumber = currentMesh;
@@ -160,11 +167,6 @@ namespace vulkan {
         device.submit_upload_work(context, vk::PipelineStageFlagBits2::eNone, vk::PipelineStageFlagBits2::eCopy);
 
         device.get_handle().destroyBuffer(stagingBuffer.handle);
-
-        /*device.deviceDeletionQueue.push_lambda([&]() {
-            vmaDestroyBuffer(allocator, vertexBuffer.vertexBuffer.handle, vertexBuffer.vertexBuffer.allocation);
-            vmaDestroyBuffer(allocator, vertexBuffer.indexBuffer.handle, vertexBuffer.indexBuffer.allocation);
-        });*/
     }
 
     void MeshManager::assert_handle(const MeshHandle handle) const {

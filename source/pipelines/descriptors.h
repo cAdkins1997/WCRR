@@ -11,6 +11,7 @@ namespace vulkan {
 
     public:
         explicit DescriptorBuilder(vulkan::Device &device);
+        void release_descriptor_resources();
 
         vk::DescriptorSet build(vk::DescriptorSetLayout &layout);
 
@@ -37,5 +38,7 @@ namespace vulkan {
                 {vk::DescriptorType::eStorageBuffer, uniformCount},
                 {vk::DescriptorType::eStorageImage,  textureCount},
         };
+
+        vk::DescriptorPool pool;
     };
 }

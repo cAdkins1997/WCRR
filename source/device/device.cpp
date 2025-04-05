@@ -37,6 +37,15 @@ namespace vulkan {
             frame.deletionQueue.flush();
         }
 
+        vmaDestroyImage(allocator, drawImage.handle, drawImage.allocation);
+        vkDestroyImageView(handle, drawImage.view, nullptr);
+
+        vmaDestroyImage(allocator, depthImage.handle, depthImage.allocation);
+        vkDestroyImageView(handle, depthImage.view, nullptr);
+
+        handle.destroyCommandPool(immediateCommandPool, nullptr);
+        handle.destroyFence(immediateFence, nullptr);
+
         deviceDeletionQueue.flush();
 
         handle.destroySwapchainKHR(swapchain, nullptr);
@@ -416,11 +425,6 @@ namespace vulkan {
         imageViewCI.subresourceRange = subresourceRange;
 
         vkCreateImageView(handle, &imageViewCI, nullptr, &drawImage.view);
-
-        /*deviceDeletionQueue.push_lambda([&](){
-            vmaDestroyImage(allocator, drawImage.handle, drawImage.allocation);
-            vkDestroyImageView(handle, drawImage.view, nullptr);
-        });*/
     }
 
     void Device::init_depth_images() {
@@ -459,11 +463,6 @@ namespace vulkan {
         imageViewCI.subresourceRange = subresourceRange;
 
         vkCreateImageView(handle, &imageViewCI, nullptr, &depthImage.view);
-
-        /*deviceDeletionQueue.push_lambda([&](){
-            vmaDestroyImage(allocator, depthImage.handle, depthImage.allocation);
-            vkDestroyImageView(handle, depthImage.view, nullptr);
-        });*/
     }
 
     void Device::init_instance() {
@@ -490,7 +489,7 @@ namespace vulkan {
             debugCI.messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
                                       vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
                                       vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation;
-            debugCI.pfnUserCallback = debugMessageFunc;
+            debugCI.pfnUserCallback = reinterpret_cast<vk::PFN_DebugUtilsMessengerCallbackEXT>(debugMessageFunc);
         }
 
         vk_check(

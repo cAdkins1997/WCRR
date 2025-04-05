@@ -42,10 +42,6 @@ VkPipeline PipelineBuilder::build_pipeline(vulkan::Device& device) {
     VkPipeline newPipeline;
     vkCreateGraphicsPipelines(device.get_handle(), VK_NULL_HANDLE, 1, &pipelineCI,nullptr, &newPipeline);
 
-    /*device.deviceDeletionQueue.push_lambda([&](){
-        device.get_handle().destroyPipeline(newPipeline);
-    });*/
-
     return newPipeline;
 }
 
@@ -147,5 +143,4 @@ void PipelineBuilder::disable_blending() {
     colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
     colorBlendAttachment.blendEnable = VK_FALSE;
 }
-
 

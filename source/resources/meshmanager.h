@@ -42,6 +42,7 @@ namespace vulkan {
     class MeshManager {
     public:
         MeshManager(vulkan::Device& _device, UploadContext& _context, u64 initialCount);
+        void release_gpu_resources();
 
         MeshHandle create_mesh(const fastgltf::Mesh& gltfMesh, const VertexBuffer& vertexBuffer);
         std::vector<MeshHandle> create_meshes(const fastgltf::Asset &asset);
@@ -65,7 +66,7 @@ namespace vulkan {
 
         void upload_vertex_buffer(VertexBuffer& vertexBuffer) const;
 
-        void assert_handle(const MeshHandle handle) const;
-        void assert_handle(const VertexBufferHandle vertexBuffer) const;
+        void assert_handle(MeshHandle handle) const;
+        void assert_handle(VertexBufferHandle vertexBuffer) const;
     };
 }

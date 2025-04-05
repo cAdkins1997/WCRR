@@ -6,216 +6,8 @@ namespace vulkan {
         textures.reserve(initialCount);
     }
 
-    TextureHandle TextureManager::create_texture(
-        VkFormat format,
-        VkImageUsageFlags usage,
-        fastgltf::Image& gltfImage,
-        fastgltf::Asset& asset)
-    {
-        Image newImage;
-
-        std::visit(fastgltf::visitor {
-            [&](auto& arg) {},
-                [&](fastgltf::sources::URI& path) {
-                    std::string prepend = "../assets/";
-                    prepend.append(path.uri.c_str());
-
-                    ktxTexture* texture;
-
-                    const ktxResult result = ktxTexture_CreateFromNamedFile(
-                        prepend.c_str(),
-                        KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT,
-                        &texture
-                        );
-
-                    if (result != KTX_SUCCESS)
-                        throw std::runtime_error("Failed to load KTX texture" + prepend);
-
-                    const ku32 width = texture->baseWidth;
-                    const ku32 height = texture->baseHeight;
-                    const ku32 mipLevels = texture->numLevels;
-
-                    ku8* ktxTextureData = texture->pData;
-                    ku64 textureSize = texture->dataSize;
-
-                    const vk::Extent3D extent { width, height, 1 };
-
-                    auto stagingBuffer = make_staging_buffer(textureSize * mipLevels, device.get_allocator());
-                    void* stagingData = stagingBuffer.get_mapped_data();
-                    vmaMapMemory(device.get_allocator(), stagingBuffer.allocation, &stagingData);
-                    memcpy(stagingData, ktxTextureData, textureSize);
-                    vmaUnmapMemory(device.get_allocator(), stagingBuffer.allocation);
-
-                    std::vector<vk::BufferImageCopy> regions;
-                    for (u32 i = 0; i < mipLevels; i++) {
-                        ku64 offset;
-                        if (ktxTexture_GetImageOffset(texture, i, 0, 0, &offset) == KTX_SUCCESS) {
-                            vk::BufferImageCopy copyRegion;
-                            copyRegion.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-                            copyRegion.imageSubresource.mipLevel = i;
-                            copyRegion.imageSubresource.baseArrayLayer = 0;
-                            copyRegion.imageSubresource.layerCount = 1;
-                            copyRegion.imageExtent.width = std::max(1u, texture->baseWidth >> i);
-                            copyRegion.imageExtent.height = std::max(1u, texture->baseHeight >> i);
-                            copyRegion.imageExtent.depth = 1;
-                            copyRegion.bufferOffset = offset;
-
-                            regions.push_back(copyRegion);
-                        }
-                    }
-
-                    newImage = device.create_image(extent, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, mipLevels, true);
-                    /*device.submit_immediate_work([&](vk::CommandBuffer cmd) {
-                        UploadContext immediateContext(device.get_handle(), cmd, device.get_allocator());
-                        image_barrier(newImage.handle, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-                        cmd.copyBufferToImage(stagingBuffer.handle, newImage.handle, vk::ImageLayout::eTransferDstOptimal, regions);
-                        image_barrier(newImage.handle, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
-                    });
-
-                    device.get_allocator().destroyBuffer(stagingBuffer.handle, stagingBuffer.allocation);*/
-
-                    image_barrier(newImage.handle, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-                    device.immediateCommandBuffer.copyBufferToImage(stagingBuffer.handle, newImage.handle, vk::ImageLayout::eTransferDstOptimal, regions);
-                    image_barrier(newImage.handle, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
-            },
-
-            [&](fastgltf::sources::Array& array) {
-
-                ku8* ktxTextureData{};
-                ku64 textureSize{};
-                ktxTexture* texture;
-
-                const ktxResult result = ktxTexture_CreateFromMemory(ktxTextureData, textureSize, KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &texture);
-
-                if (result != KTX_SUCCESS) {
-                    throw std::runtime_error("Failed to load KTX texture");
-                }
-
-                const ku32 width = texture->baseWidth;
-                const ku32 height = texture->baseHeight;
-                const ku32 mipLevels = texture->numLevels;
-
-                const vk::Extent3D extent{width, height, 1};
-
-                auto stagingBuffer = make_staging_buffer(textureSize, device.get_allocator());
-                void* stagingData = stagingBuffer.get_mapped_data();
-                vmaMapMemory(device.get_allocator(), stagingBuffer.allocation, &stagingData);
-                memcpy(ktxTextureData, stagingData, textureSize);
-                vmaUnmapMemory(device.get_allocator(), stagingBuffer.allocation);
-
-                std::vector<vk::BufferImageCopy> regions;
-                    for (u32 i = 0; i < mipLevels; i++) {
-                        ku64 offset;
-                        if (ktxTexture_GetImageOffset(texture, i, 0, 0, &offset) == KTX_SUCCESS) {
-                            vk::BufferImageCopy copyRegion;
-                            copyRegion.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-                            copyRegion.imageSubresource.mipLevel = i;
-                            copyRegion.imageSubresource.baseArrayLayer = 0;
-                            copyRegion.imageSubresource.layerCount = 1;
-                            copyRegion.imageExtent.width = std::max(1u, texture->baseWidth >> i);
-                            copyRegion.imageExtent.height = std::max(1u, texture->baseHeight >> i);
-                            copyRegion.imageExtent.depth = 1;
-                            copyRegion.bufferOffset = offset;
-
-                            regions.push_back(copyRegion);
-                        }
-                    }
-
-                    newImage = device.create_image(extent, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, mipLevels, true);
-                    /*device.submit_immediate_work([&](vk::CommandBuffer cmd) {
-                        UploadContext immediateContext(device.get_handle(), cmd, device.get_allocator());
-                        image_barrier(newImage.handle, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-                        cmd.copyBufferToImage(stagingBuffer.handle, newImage.handle, vk::ImageLayout::eTransferDstOptimal, regions);
-                        image_barrier(newImage.handle, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
-                    });
-
-                    device.get_allocator().destroyBuffer(stagingBuffer.handle, stagingBuffer.allocation);*/
-
-                    image_barrier(newImage.handle, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-                    device.immediateCommandBuffer.copyBufferToImage(stagingBuffer.handle, newImage.handle, vk::ImageLayout::eTransferDstOptimal, regions);
-                    image_barrier(newImage.handle, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
-            },
-
-            [&](fastgltf::sources::BufferView& view) {
-                auto& bufferView = asset.bufferViews[view.bufferViewIndex];
-                auto& buffer = asset.buffers[bufferView.bufferIndex];
-
-                std::visit(
-                    fastgltf::visitor {
-                        [&](auto& arg) {},
-                        [&](fastgltf::sources::Array& array) {
-                            const auto ktxTextureBytes = reinterpret_cast<const ku8*>(array.bytes.data() + bufferView.byteOffset);
-                            const auto byteLength = static_cast<i32>(bufferView.byteLength);
-
-                            ktxTexture* texture;
-                            const ktxResult result = ktxTexture_CreateFromMemory(
-                                ktxTextureBytes,
-                                byteLength,
-                                KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT,
-                                &texture
-                                );
-
-                            if (result != KTX_SUCCESS) {
-                                throw std::runtime_error("Failed to load KTX texture");
-                            }
-
-                            const ku32 width = texture->baseWidth;
-                            const ku32 height = texture->baseHeight;
-                            const ku32 mipLevels = texture->numLevels;
-
-                            const vk::Extent3D extent{width, height, 1};
-
-                            auto stagingBuffer = make_staging_buffer(byteLength, device.get_allocator());
-                            void* stagingData = stagingBuffer.get_mapped_data();
-                            vmaMapMemory(device.get_allocator(), stagingBuffer.allocation, &stagingData);
-                            memcpy(texture, stagingData, byteLength);
-                            vmaUnmapMemory(device.get_allocator(), stagingBuffer.allocation);
-
-                            std::vector<vk::BufferImageCopy> regions;
-                            for (u32 i = 0; i < mipLevels; i++) {
-                                ku64 offset;
-                                if (ktxTexture_GetImageOffset(texture, i, 0, 0, &offset) == KTX_SUCCESS) {
-                                    vk::BufferImageCopy copyRegion;
-                                    copyRegion.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-                                    copyRegion.imageSubresource.mipLevel = i;
-                                    copyRegion.imageSubresource.baseArrayLayer = 0;
-                                    copyRegion.imageSubresource.layerCount = 1;
-                                    copyRegion.imageExtent.width = std::max(1u, texture->baseWidth >> i);
-                                    copyRegion.imageExtent.height = std::max(1u, texture->baseHeight >> i);
-                                    copyRegion.imageExtent.depth = 1;
-                                    copyRegion.bufferOffset = offset;
-
-                                    regions.push_back(copyRegion);
-                                }
-                            }
-
-                            newImage = device.create_image(extent, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, mipLevels, true);
-                            /*device.submit_immediate_work([&](vk::CommandBuffer cmd) {
-                                UploadContext immediateContext(device.get_handle(), cmd, device.get_allocator());
-                                image_barrier(newImage.handle, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-                                cmd.copyBufferToImage(stagingBuffer.handle, newImage.handle, vk::ImageLayout::eTransferDstOptimal, regions);
-                                image_barrier(newImage.handle, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
-                            });
-
-                            device.get_allocator().destroyBuffer(stagingBuffer.handle, stagingBuffer.allocation);*/
-
-                            image_barrier(newImage.handle, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-                            device.immediateCommandBuffer.copyBufferToImage(stagingBuffer.handle, newImage.handle, vk::ImageLayout::eTransferDstOptimal, regions);
-                            image_barrier(newImage.handle, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
-                        }
-                    }, buffer.data);
-            }
-        }, gltfImage.data);
-        newImage.magicNumber = textureCount;
-
-
-        textures.push_back(newImage);
-
-        const auto handle = static_cast<TextureHandle>(newImage.magicNumber << 16 | textureCount);
-        textureCount++;
-        return handle;
-    }
-
+    //TODO This only needs one dynamic array of textures. Rewrite the loop that moves the data to the staging buffer using iterators/indicies into the global texture array
+    //TODO alternatively find a way to do it one memcpy
     std::vector<TextureHandle> TextureManager::create_textures(
         const VkFormat format,
         const VkImageUsageFlags usage,
@@ -403,6 +195,8 @@ namespace vulkan {
             for (u64 j = 0; j < size; j++) {
                 data.push_back(textureData[j]);
             }
+
+            ktxTexture_Destroy(currentTexture);
         }
 
         vmaMapMemory(device.get_allocator(), stagingBuffer.allocation, &stagingData);
@@ -558,9 +352,14 @@ namespace vulkan {
         textureCount--;
     }
 
-    TextureManager::~TextureManager() {
+    void TextureManager::release_gpu_resources() {
         for (auto& texture : textures) {
             vmaDestroyImage(device.get_allocator(), texture.handle, texture.allocation);
+            vkDestroyImageView(device.get_handle(), texture.view, nullptr);
+        }
+
+        for (auto& sampler : samplers) {
+            vkDestroySampler(device.get_handle(), sampler.sampler, nullptr);
         }
     }
 }

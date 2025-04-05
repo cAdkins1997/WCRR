@@ -141,4 +141,8 @@ namespace vulkan  {
         assert(index < materials.size());
         assert(materials[index].magicNumber == metaData);
     }
+
+    void MaterialManager::release_gpu_resources() {
+        vmaDestroyBuffer(device.get_allocator(), materialBuffer.handle, materialBuffer.allocation);
+    }
 }

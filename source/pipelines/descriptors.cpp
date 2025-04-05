@@ -10,11 +10,7 @@ namespace vulkan {
         poolCI.setPoolSizes(poolSizes);
         poolCI.setMaxSets(1);
         poolCI.setFlags(vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind);
-        auto pool = _device.get_handle().createDescriptorPool(poolCI);
-
-        /*_device.deviceDeletionQueue.push_lambda([&]() {
-            _device.get_handle().destroyDescriptorPool(pool);
-        });*/
+        pool = _device.get_handle().createDescriptorPool(poolCI);
 
         auto bindings = {
                 vk::DescriptorSetLayoutBinding()
@@ -83,5 +79,9 @@ namespace vulkan {
         const u32 writeCount = static_cast<u32>(writes.size());
 
         _device.get_handle().updateDescriptorSets(writeCount, writes.data(), 0, nullptr);
+    }
+
+    void DescriptorBuilder::release_descriptor_resources() {
+        _device.get_handle().destroyDescriptorPool(pool);
     }
 }

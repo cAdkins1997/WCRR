@@ -33,14 +33,7 @@ namespace vulkan {
     class TextureManager {
     public:
         TextureManager(Device& _device, UploadContext& _context, u64 initialCount);
-        ~TextureManager();
-
-        TextureHandle create_texture(
-            VkFormat format,
-            VkImageUsageFlags usage,
-            fastgltf::Image& fastgltfImage,
-            fastgltf::Asset& asset
-            );
+        void release_gpu_resources();
 
         std::vector<TextureHandle> create_textures(
                 VkFormat format,

@@ -62,6 +62,16 @@ Application::Application(vulkan::Device& _device) : device(_device) {
 }
 
 Application::~Application() {
+    vkDeviceWaitIdle(device.get_handle());
+    meshManager->release_gpu_resources();
+    textureManager->release_gpu_resources();
+    materialManager->release_gpu_resources();
+    sceneManager->release_gpu_resources();
+    descriptorBuilder->release_descriptor_resources();
+    device.get_handle().destroyPipeline(opaquePipeline.pipeline);
+    device.get_handle().destroyPipelineLayout(opaquePipeline.pipelineLayout);
+    device.get_handle().destroyDescriptorSetLayout(opaquePipeline.setLayout);
+    vmaDestroyBuffer(device.get_allocator(), sceneDataBuffer.handle, sceneDataBuffer.allocation);
 }
 
 void Application::run() {
@@ -79,7 +89,6 @@ void Application::draw() {
     update();
     device.wait_on_present();
     auto& currentFrame = device.get_current_frame();
-    //currentFrame.deletionQueue.flush();
 
     const u32 index = device.get_swapchain_image_index();
     const vk::Image& currentSwapchainImage = device.swapchainImages[index];
@@ -136,20 +145,19 @@ void Application::init() {
 
 void Application::update() const {
     sceneManager->update_nodes(glm::mat4(1.0f), testScene);
-    sceneManager->update_lights();
     sceneManager->update_light_buffer();
 }
 
 void Application::init_descriptors() {
-    vulkan::DescriptorBuilder builder(device);
-    auto globalSet = builder.build(opaquePipeline.setLayout);
+    descriptorBuilder = std::make_unique<vulkan::DescriptorBuilder>(device);
+    auto globalSet = descriptorBuilder->build(opaquePipeline.setLayout);
     opaquePipeline.set = globalSet;
     transparentPipeline.set = globalSet;
-    builder.write_buffer(sceneDataBuffer.handle, sizeof(SceneData), 0, vk::DescriptorType::eUniformBuffer);
+    descriptorBuilder->write_buffer(sceneDataBuffer.handle, sizeof(SceneData), 0, vk::DescriptorType::eUniformBuffer);
 
-    textureManager->write_textures(builder);
+    textureManager->write_textures(*descriptorBuilder);
 
-    builder.update_set(opaquePipeline.set);
+    descriptorBuilder->update_set(opaquePipeline.set);
 
     vk::PushConstantRange pcRange(vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 0, sizeof(vulkan::PushConstants));
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo;
@@ -235,10 +243,6 @@ void Application::init_scene_resources() {
         VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT |
         VMA_ALLOCATION_CREATE_MAPPED_BIT
         );
-
-    device.deviceDeletionQueue.push_lambda([&](){
-        vmaDestroyBuffer(device.get_allocator(), sceneDataBuffer.handle, sceneDataBuffer.allocation);
-    });
 
     if (auto gltf = sceneManager->load_gltf("../assets/NewSponza_Main_glTF_003.gltf"); gltf.has_value()) {
         testScene = sceneManager->create_scene(gltf.value(), *meshManager, *textureManager, *materialManager);

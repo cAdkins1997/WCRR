@@ -41,6 +41,7 @@ namespace vulkan  {
     class MaterialManager {
     public:
         explicit MaterialManager(Device& _device, u64 initialCount);
+        void release_gpu_resources();
 
         MaterialHandle create_material(const fastgltf::Material& material);
         std::vector<MaterialHandle> create_materials(const fastgltf::Asset& asset);
@@ -50,11 +51,11 @@ namespace vulkan  {
 
         Material& get_material(MaterialHandle handle);
 
-        Buffer get_material_buffer() const { return materialBuffer; };
-        u32 get_material_buffer_size() const { return materialBufferSize; };
-        vk::DeviceAddress get_material_buffer_address() const { return materialBufferAddress; }
+        [[nodiscard]] Buffer get_material_buffer() const { return materialBuffer; };
+        [[nodiscard]] u32 get_material_buffer_size() const { return materialBufferSize; };
+        [[nodiscard]] vk::DeviceAddress get_material_buffer_address() const { return materialBufferAddress; }
 
-        MaterialType get_material_type(MaterialHandle handle) const;
+        [[nodiscard]] MaterialType get_material_type(MaterialHandle handle) const;
 
     private:
         Device& device;

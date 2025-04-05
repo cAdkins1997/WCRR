@@ -13,13 +13,13 @@ namespace vulkan {
 
     SceneManager::SceneManager(Device &_device, UploadContext& _context) : device(_device), context(_context) {}
 
-    void SceneManager::draw_scene(const GraphicsContext& context, MeshManager& meshManager, const MaterialManager& materialManager, const SceneHandle handle) const {
+    void SceneManager::draw_scene(const GraphicsContext& graphicsContext, MeshManager& meshManager, const MaterialManager& materialManager, const SceneHandle handle) const {
         assert_handle(handle);
         const u32 sceneIndex = get_handle_index(handle);
 
         auto materialBuffer = materialManager.get_material_buffer_address();
         auto vertexBuffer = meshManager.get_vertex_buffer(0);
-        context.bind_index_buffer(vertexBuffer.indexBuffer);
+        graphicsContext.bind_index_buffer(vertexBuffer.indexBuffer);
 
         for (auto scene = scenes[sceneIndex]; const auto& nodeHandle : scene.opaqueNodes) {
             assert_handle(nodeHandle);
@@ -33,8 +33,8 @@ namespace vulkan {
                 const auto material = get_handle_index(surface.material);
 
                 PushConstants pc { node.worldMatrix, vertexBuffer.vertexBufferAddress, materialBuffer, lightBufferAddress, material, numLights};
-                context.set_push_constants(&pc, sizeof(pc), vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
-                context.draw(surface.indexCount, surface.initialIndex);
+                graphicsContext.set_push_constants(&pc, sizeof(pc), vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
+                graphicsContext.draw(surface.indexCount, surface.initialIndex);
             }
         }
     }
@@ -148,7 +148,6 @@ namespace vulkan {
         }
 
         build_light_buffer(asset.lights.size());
-        update_lights();
         update_light_buffer();
 
         auto textureHandles = textureManager.create_textures(
@@ -398,7 +397,7 @@ namespace vulkan {
         assert(lights[index].magicNumber == metaData && "Handle metadata does not match an existing light");
     }
 
-    SceneManager::~SceneManager() {
+    void SceneManager::release_gpu_resources() {
         vmaDestroyBuffer(device.get_allocator(), lightBuffer.handle, lightBuffer.allocation);
     }
 }
