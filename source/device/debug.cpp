@@ -1,12 +1,13 @@
 #include "debug.h"
 
 namespace vulkan {
-    vk::Bool32 debugMessageFunc(vk::DebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-                                vk::DebugUtilsMessageTypeFlagsEXT messageTypes,
-                                const vk::DebugUtilsMessengerCallbackDataEXT *pCallbackData, void *) {
+    vk::Bool32 debugMessageFunc(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+                                VkDebugUtilsMessageTypeFlagsEXT messageTypes,
+                                const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData, void *) {
             std::ostringstream message;
 
-            message << vk::to_string(messageSeverity) << ": " << vk::to_string(messageTypes) << ":\n";
+            message << vk::to_string(static_cast<vk::DebugUtilsMessageSeverityFlagsEXT>(messageSeverity))
+            << ": " << vk::to_string(static_cast<vk::DebugUtilsMessageTypeFlagBitsEXT>(messageTypes)) << ":\n";
             message << std::string("\t") << "messageIDName   = <" << pCallbackData->pMessageIdName << ">\n";
             message << std::string("\t") << "messageIdNumber = " << pCallbackData->messageIdNumber << "\n";
             message << std::string("\t") << "message         = <" << pCallbackData->pMessage << ">\n";
@@ -28,10 +29,12 @@ namespace vulkan {
             if (0 < pCallbackData->objectCount) {
                 message << std::string("\t") << "Objects:\n";
 
+                auto callBackData = (vk::DebugUtilsMessengerCallbackDataEXT*)pCallbackData;
+
                 for (u32 i = 0; i < pCallbackData->objectCount; i++) {
                     message << std::string("\t\t") << "Object " << i << "\n";
                     message << std::string("\t\t\t") << "objectType   = "
-                            << vk::to_string(pCallbackData->pObjects[i].objectType) << "\n";
+                            << vk::to_string(callBackData->pObjects[i].objectType) << "\n";
                     message << std::string("\t\t\t") << "objectHandle = " << pCallbackData->pObjects[i].objectHandle
                             << "\n";
 

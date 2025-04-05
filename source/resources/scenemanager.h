@@ -107,7 +107,6 @@ namespace vulkan {
         LightHandle create_light(const fastgltf::Light& gltfLight);
         LightHandle create_point_light(glm::vec3 direction, glm::vec3 colour, f32 intensity, f32 range);
 
-        void update_lights();
         void build_light_buffer(u64 size);
         void update_light_buffer();
 
@@ -117,6 +116,7 @@ namespace vulkan {
         Node& get_node(NodeHandle handle);
         Scene& get_scene(SceneHandle handle);
         Light& get_light(LightHandle handle);
+        u32 get_num_lights() const { return lights.size(); }
 
         Buffer& get_light_buffer() { return lightBuffer; }
         u32 get_light_buffer_size() const { return lightBufferSize; }

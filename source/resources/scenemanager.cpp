@@ -148,6 +148,7 @@ namespace vulkan {
         }
 
         build_light_buffer(asset.lights.size());
+        update_lights();
         update_light_buffer();
 
         auto textureHandles = textureManager.create_textures(
@@ -196,7 +197,7 @@ namespace vulkan {
         newLight.magicNumber = currentLight;
         newLight.colour = glm::vec3(gltfLight.color.x(), gltfLight.color.y(), gltfLight.color.z());
         newLight.intensity = gltfLight.intensity;
-        if (newLight.intensity <= 0.0f) newLight.intensity = 5.0f;
+        if (newLight.intensity <= 0.0f) newLight.intensity = 0.01f;
 
         if (gltfLight.range.has_value()) {
             newLight.range = gltfLight.range.value();
@@ -246,14 +247,6 @@ namespace vulkan {
         return handle;
     }
 
-    void SceneManager::update_lights() {
-        for (auto light : lights) {
-            auto node = get_node(light.node);
-            const auto mult = glm::vec4(light.direction, 1.0f) * node.worldMatrix;
-            light.direction = normalize(glm::vec3(mult.x, mult.y, mult.z));
-        }
-    }
-
     void SceneManager::build_light_buffer(const u64 size) {
         if (size > 0) {
             lightBuffer = device.create_buffer(
@@ -272,7 +265,6 @@ namespace vulkan {
 
     void SceneManager::update_light_buffer() {
         if (lightBufferSize > 0) {
-            update_lights();
             auto* lightData = static_cast<GPULight*>(lightBuffer.get_mapped_data());
             for (u32 i = 0; i < lights.size(); i++) {
                 GPULight gpuLight;
@@ -285,6 +277,7 @@ namespace vulkan {
                 gpuLight.outerAngle = lights[i].outerAngle;
                 lightData[i] = gpuLight;
             }
+            context.update_uniform(lightData, lightBufferSize, lightBuffer);
         }
     }
 

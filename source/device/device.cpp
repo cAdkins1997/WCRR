@@ -27,14 +27,14 @@ namespace vulkan {
 
     Device::~Device() {
         handle.waitIdle();
-        for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            auto& currentFrame = frames[i];
+        for (auto & frame : frames) {
+            auto& currentFrame = frame;
             handle.destroyCommandPool(currentFrame.commandPool, nullptr);
             handle.destroyFence(currentFrame.renderFence, nullptr);
             handle.destroySemaphore(currentFrame.renderSemaphore, nullptr);
             handle.destroySemaphore(currentFrame.swapchainSemaphore, nullptr);
 
-            frames[i].deletionQueue.flush();
+            frame.deletionQueue.flush();
         }
 
         deviceDeletionQueue.flush();
@@ -46,7 +46,7 @@ namespace vulkan {
         }
 
         instance.destroySurfaceKHR(surface, nullptr);
-        handle.destroy();
+        //handle.destroy();
 
         glfwDestroyWindow(window);
     }
@@ -68,7 +68,7 @@ namespace vulkan {
 
         Buffer newBuffer{};
 
-        vmaCreateBuffer(allocator, (VkBufferCreateInfo*)&bufferInfo, &vmaallocInfo, (VkBuffer*)&newBuffer.handle, &newBuffer.allocation, &newBuffer.info);
+        vmaCreateBuffer(allocator, reinterpret_cast<VkBufferCreateInfo*>(&bufferInfo), &vmaallocInfo, (VkBuffer*)&newBuffer.handle, &newBuffer.allocation, &newBuffer.info);
 
         return newBuffer;
     }
@@ -99,7 +99,7 @@ namespace vulkan {
         allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
         allocInfo.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
-        vmaCreateImage(allocator, (VkImageCreateInfo*)&imageCI, &allocInfo, (VkImage*)&newImage.handle, &newImage.allocation, nullptr);
+        vmaCreateImage(allocator, &imageCI, &allocInfo, (VkImage*)&newImage.handle, &newImage.allocation, nullptr);
 
         VkImageAspectFlags aspectFlag = VK_IMAGE_ASPECT_COLOR_BIT;
         if (format == VK_FORMAT_D32_SFLOAT)
@@ -178,7 +178,7 @@ namespace vulkan {
         waitInfo.stageMask = wait;
         vk::SemaphoreSubmitInfo signalInfo(get_current_frame().renderSemaphore);
         signalInfo.stageMask = signal;
-        const vk::SubmitFlagBits submitFlags{};
+        constexpr vk::SubmitFlagBits submitFlags{};
         const vk::SubmitInfo2 submitInfo(
             submitFlags,
             1, &waitInfo,
@@ -360,16 +360,16 @@ namespace vulkan {
     }
 
     void Device::init_allocator() {
-        /*VmaVulkanFunctions vulkanFunctions = {};
+        VmaVulkanFunctions vulkanFunctions{};
         vulkanFunctions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
-        vulkanFunctions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;*/
+        vulkanFunctions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;
 
         VmaAllocatorCreateInfo allocatorInfo{};
-        allocatorInfo.vulkanApiVersion = vk::ApiVersion13;
+        allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_3;
         allocatorInfo.physicalDevice = gpu;
         allocatorInfo.device = handle;
         allocatorInfo.instance = instance;
-        //allocatorInfo.pVulkanFunctions = &vulkanFunctions;
+        allocatorInfo.pVulkanFunctions = &vulkanFunctions;
         allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
 
         vmaCreateAllocator(&allocatorInfo, &allocator);
@@ -386,8 +386,7 @@ namespace vulkan {
         VK_IMAGE_USAGE_STORAGE_BIT |
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-        VkImageCreateInfo imageCI{.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
-        imageCI.pNext = nullptr;
+        VkImageCreateInfo imageCI{.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .pNext = nullptr};
         imageCI.format = drawImage.format;
         imageCI.usage = drawImageUsages;
         imageCI.extent = drawImageExtent;
@@ -399,7 +398,7 @@ namespace vulkan {
 
         VmaAllocationCreateInfo imageAI{};
         imageAI.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-        imageAI.requiredFlags = (VkMemoryPropertyFlags)VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        imageAI.requiredFlags = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
         vmaCreateImage(allocator, &imageCI, &imageAI, &drawImage.handle, &drawImage.allocation, nullptr);
 
@@ -418,10 +417,10 @@ namespace vulkan {
 
         vkCreateImageView(handle, &imageViewCI, nullptr, &drawImage.view);
 
-        deviceDeletionQueue.push_lambda([&](){
+        /*deviceDeletionQueue.push_lambda([&](){
             vmaDestroyImage(allocator, drawImage.handle, drawImage.allocation);
             vkDestroyImageView(handle, drawImage.view, nullptr);
-        });
+        });*/
     }
 
     void Device::init_depth_images() {
@@ -431,13 +430,14 @@ namespace vulkan {
 
         constexpr VkImageUsageFlags depthImageUsages = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-        VkImageCreateInfo imageCI;
+        VkImageCreateInfo imageCI{.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .pNext = nullptr};
         imageCI.format = depthImage.format;
         imageCI.usage = depthImageUsages;
         imageCI.extent = depthImageExtent;
         imageCI.imageType = VK_IMAGE_TYPE_2D;
         imageCI.mipLevels = 1;
         imageCI.arrayLayers = 1;
+        imageCI.samples = VK_SAMPLE_COUNT_1_BIT;
 
         VmaAllocationCreateInfo allocationCI;
         allocationCI.usage = VMA_MEMORY_USAGE_GPU_ONLY;
@@ -460,10 +460,10 @@ namespace vulkan {
 
         vkCreateImageView(handle, &imageViewCI, nullptr, &depthImage.view);
 
-        deviceDeletionQueue.push_lambda([&](){
+        /*deviceDeletionQueue.push_lambda([&](){
             vmaDestroyImage(allocator, depthImage.handle, depthImage.allocation);
             vkDestroyImageView(handle, depthImage.view, nullptr);
-        });
+        });*/
     }
 
     void Device::init_instance() {

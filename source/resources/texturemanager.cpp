@@ -421,16 +421,6 @@ namespace vulkan {
 
         device.get_handle().destroyBuffer(stagingBuffer.handle);
 
-        device.deviceDeletionQueue.push_lambda([&]() {
-            for (auto ktxImage : ktxTexturePs) {
-                ktxTexture_Destroy(ktxImage);
-            }
-            for (auto image : images) {
-                vmaDestroyImage(device.get_allocator(), image.handle, image.allocation);
-                vkDestroyImageView(device.get_handle(), image.view, nullptr);
-            }
-        });
-
         return handles;
     }
 
