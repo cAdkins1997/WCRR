@@ -461,7 +461,7 @@ namespace vulkan {
         _commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipelineLayout, 0, 1, &pipeline.set, 0, nullptr);
     }
 
-    void GraphicsContext::bind_index_buffer(const vulkan::Buffer &indexBuffer) const {
+    void GraphicsContext::bind_index_buffer(const vulkan::Buffer& indexBuffer) const {
         _commandBuffer.bindIndexBuffer(indexBuffer.handle, 0, vk::IndexType::eUint32);
     }
 

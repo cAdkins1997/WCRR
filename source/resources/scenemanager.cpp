@@ -1,6 +1,7 @@
 
 #include "scenemanager.h"
 
+#include "resourcehelpers.h"
 #include "../application.h"
 
 namespace vulkan {
@@ -11,29 +12,36 @@ namespace vulkan {
         }
     }
 
-    SceneManager::SceneManager(Device &_device, UploadContext& _context) : device(_device), context(_context) {}
+    SceneManager::SceneManager(Device& _device, UploadContext& _context) : device(_device), context(_context) {}
 
-    void SceneManager::draw_scene(const GraphicsContext& graphicsContext, MeshManager& meshManager, const MaterialManager& materialManager, const SceneHandle handle) const {
+    void SceneManager::draw_scene(const GraphicsContext &graphicsContext, SceneHandle handle) {
         assert_handle(handle);
         const u32 sceneIndex = get_handle_index(handle);
 
-        auto materialBuffer = materialManager.get_material_buffer_address();
-        auto vertexBuffer = meshManager.get_vertex_buffer(0);
+        auto materialBuffer = get_material_buffer_address();
+        auto vertexBuffer = vertexBuffers[0];
         graphicsContext.bind_index_buffer(vertexBuffer.indexBuffer);
 
-        for (auto scene = scenes[sceneIndex]; const auto& nodeHandle : scene.opaqueNodes) {
+        auto& scene = scenes[sceneIndex];
+        for (const auto& nodeHandle : scene.opaqueNodes) {
             assert_handle(nodeHandle);
             const u32 index = get_handle_index(nodeHandle);
             auto& node = nodes[index];
-            auto& mesh = meshManager.get_mesh(node.mesh);
+            auto& mesh = get_mesh(node.mesh);
 
             const u32 numLights = static_cast<u32>(scene.lights.size());
 
             for (const auto& surface : mesh.surfaces) {
                 const auto material = get_handle_index(surface.material);
 
-                PushConstants pc { node.worldMatrix, vertexBuffer.vertexBufferAddress, materialBuffer, lightBufferAddress, material, numLights};
-                graphicsContext.set_push_constants(&pc, sizeof(pc), vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
+                pc.renderMatrix = node.worldMatrix;
+                pc.vertexBuffer = vertexBuffer.vertexBufferAddress;
+                pc.materialBuffer = materialBuffer;
+                pc.lightBuffer = lightBufferAddress;
+                pc.materialIndex = material;
+                pc.numLights = numLights;
+
+                graphicsContext.set_push_constants(&pc, sizeof(pc), vk::ShaderStageFlagBits::eAll);
                 graphicsContext.draw(surface.indexCount, surface.initialIndex);
             }
         }
@@ -46,7 +54,7 @@ namespace vulkan {
         }
     }
 
-    NodeHandle SceneManager::create_node(fastgltf::Node gltfNode, const MeshManager& meshManager) {
+    NodeHandle SceneManager::create_node(fastgltf::Node gltfNode) {
         Node newNode;
         newNode.magicNumber = currentNode;
 
@@ -76,7 +84,7 @@ namespace vulkan {
         }
 
         if (gltfNode.meshIndex.has_value()) {
-            const u16 metaData = meshManager.get_metadata_at_index(gltfNode.meshIndex.value());
+            const u16 metaData = get_metadata_at_index(gltfNode.meshIndex.value());
             newNode.mesh = static_cast<MeshHandle>(metaData << 16 | gltfNode.meshIndex.value());
         }
 
@@ -88,14 +96,10 @@ namespace vulkan {
         return handle;
     }
 
-    SceneHandle SceneManager::create_scene(
-        fastgltf::Asset &asset,
-        MeshManager& meshManager,
-        TextureManager& textureManager,
-        MaterialManager& materialManager) {
+    SceneHandle SceneManager::create_scene(fastgltf::Asset &asset) {
         Scene newScene;
 
-        auto meshes = meshManager.create_meshes(asset);
+        auto meshes = create_meshes(asset);
 
         newScene.meshes.reserve(meshes.size());
         for (const auto& meshHandle : meshes) {
@@ -103,7 +107,7 @@ namespace vulkan {
         }
 
         for (const auto& gltfSampler : asset.samplers) {
-            auto sampler = textureManager.create_sampler(gltfSampler);
+            auto sampler = create_sampler(gltfSampler);
             newScene.samplers.push_back(sampler);
         }
 
@@ -114,7 +118,7 @@ namespace vulkan {
 
         newScene.nodes.reserve(asset.scenes.size());
         for (const auto& gltfNode : asset.nodes) {
-            NodeHandle newNodeHandle = create_node(gltfNode, meshManager);
+            NodeHandle newNodeHandle = create_node(gltfNode);
             if (gltfNode.meshIndex.has_value()) {
                 newScene.renderableNodes.push_back(newNodeHandle);
             }
@@ -150,7 +154,7 @@ namespace vulkan {
         build_light_buffer(asset.lights.size());
         update_light_buffer();
 
-        auto textureHandles = textureManager.create_textures(
+        auto textureHandles = create_textures(
                 VK_FORMAT_BC7_SRGB_BLOCK,
                 VK_IMAGE_USAGE_SAMPLED_BIT,
                 asset
@@ -159,25 +163,25 @@ namespace vulkan {
         newScene.textures =  std::move(textureHandles);
 
         for (const auto& texture : newScene.textures) {
-            textureManager.set_texture_sampler(texture, newScene.samplers[0]);
+            set_texture_sampler(texture, newScene.samplers[0]);
         }
 
-        materialManager.build_material_buffer(asset.materials.size());
+        build_material_buffer(asset.materials.size());
 
         for (auto& gltfMaterial : asset.materials) {
-            MaterialHandle materialHandle = materialManager.create_material(gltfMaterial);
+            MaterialHandle materialHandle = create_material(gltfMaterial);
             newScene.materials.push_back(materialHandle);
         }
 
-        materialManager.update_material_buffer();
+        update_material_buffer();
 
         for (const auto nodeHandle : newScene.renderableNodes) {
             const auto node = get_node(nodeHandle);
-            auto mesh = meshManager.get_mesh(node.mesh);
+            auto mesh = get_mesh(node.mesh);
             MaterialType type = invalid;
 
             for (const auto surface : mesh.surfaces) {
-                type = materialManager.get_material_type(surface.material);
+                type = get_material_type(surface.material);
             }
 
             if (type == opaque) newScene.opaqueNodes.push_back(nodeHandle);
@@ -313,6 +317,162 @@ namespace vulkan {
         return lights[index];
     }
 
+    MeshHandle SceneManager::create_mesh(const fastgltf::Mesh &gltfMesh, const VertexBuffer &vertexBuffer) {
+        Mesh newMesh;
+        newMesh.magicNumber = currentMesh;
+
+        const auto handle = static_cast<MeshHandle>(newMesh.magicNumber << 16 | meshes.size());
+        meshes.push_back(newMesh);
+        currentMesh++;
+
+        return handle;
+    }
+
+    std::vector<MeshHandle> SceneManager::create_meshes(const fastgltf::Asset &asset) {
+                VertexBuffer vertexBuffer;
+        indices.clear();
+        vertices.clear();
+
+        for (const auto& gltfMesh : asset.meshes) {
+            Mesh newMesh;
+            newMesh.magicNumber = currentMesh;
+
+            for (auto&& primitive : gltfMesh.primitives) {
+                Surface newSurface;
+                newSurface.initialIndex = indices.size();
+                newSurface.indexCount = asset.accessors[primitive.indicesAccessor.value()].count;
+                if (primitive.materialIndex.has_value()) {
+                    newSurface.material = static_cast<MaterialHandle>(primitive.materialIndex.value());
+                }
+
+
+                u64 initialVertex = vertices.size();
+                {
+                    auto& indexAccessor = asset.accessors[primitive.indicesAccessor.value()];
+                    indices.reserve(indices.size() + indexAccessor.count);
+
+                    fastgltf::iterateAccessor<u32>(asset, indexAccessor,
+                        [&](u32 idx) {
+                        indices.push_back(idx + initialVertex);
+                    });
+                }
+
+                {
+                    auto& positionAccessor = asset.accessors[primitive.findAttribute("POSITION")->accessorIndex];
+                    vertices.resize(vertices.size() + positionAccessor.count);
+
+                    fastgltf::iterateAccessorWithIndex<glm::vec3>(asset, positionAccessor,
+                        [&](glm::vec3 v, size_t index) {
+                            Vertex newVertex{};
+                            newVertex.position = v;
+                            newVertex.normal = { 1, 0, 0 };
+                            newVertex.colour = glm::vec4 { 1.f };
+                            newVertex.uvX = 0;
+                            newVertex.uvY = 0;
+                            vertices[initialVertex + index] = newVertex;
+                    });
+                }
+
+                auto normals = primitive.findAttribute("NORMAL");
+                if (normals != primitive.attributes.end()) {
+                    fastgltf::iterateAccessorWithIndex<glm::vec3>(asset, asset.accessors[normals->accessorIndex],
+                        [&](glm::vec3 v, size_t index) {
+                            vertices[initialVertex + index].normal = v;
+                        });
+                }
+
+                auto uv = primitive.findAttribute("TEXCOORD_0");
+                if (uv != primitive.attributes.end()) {
+
+                    fastgltf::iterateAccessorWithIndex<glm::vec2>(asset, asset.accessors[uv->accessorIndex],
+                        [&](glm::vec2 v, size_t index) {
+                            vertices[initialVertex + index].uvX = v.x;
+                            vertices[initialVertex + index].uvY = -v.y;
+                        });
+                }
+
+                if (auto colors = primitive.findAttribute("COLOR_0"); colors != primitive.attributes.end()) {
+                    fastgltf::iterateAccessorWithIndex<glm::vec4>(asset, asset.accessors[colors->accessorIndex],
+                    [&](glm::vec4 v, u64 index) {
+                        vertices[initialVertex + index].colour = v;
+                    });
+                }
+
+                newMesh.surfaces.push_back(newSurface);
+            }
+
+            const auto handle = static_cast<MeshHandle>(newMesh.magicNumber << 16 | meshes.size());
+            meshes.push_back(newMesh);
+            currentMesh++;
+
+            vertexBuffer.meshes.push_back(handle);
+        }
+
+        upload_vertex_buffer(vertexBuffer);
+        vertexBuffer.magicNumber = currentVertexBuffer;
+
+        vertexBuffers.emplace_back(std::move(vertexBuffer));
+        currentVertexBuffer++;
+
+        return vertexBuffer.meshes;
+    }
+
+    Mesh& SceneManager::get_mesh(MeshHandle handle) {
+        assert_handle(handle);
+        const u32 index = get_handle_index(handle);
+        return meshes[index];
+    }
+
+    VertexBuffer& SceneManager::get_vertex_buffer(u32 index) {
+        return vertexBuffers[index];
+    }
+
+    u16 SceneManager::get_metadata_at_index(u32 index) const {
+        return meshes[index].magicNumber;
+    }
+
+    void SceneManager::upload_vertex_buffer(VertexBuffer &vertexBuffer) const {
+        const u64 vertexBufferSize = vertices.size() * sizeof(Vertex);
+        const u64 indexBufferSize = indices.size() * sizeof(u32);
+
+        const auto allocator = device.get_allocator();
+
+        constexpr VkBufferUsageFlags vertexBufferFlags =
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
+                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+
+        vertexBuffer.vertexBuffer = create_device_buffer(vertexBufferSize, vertexBufferFlags, allocator);
+
+        constexpr VkBufferUsageFlags indexBufferFlags = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        vertexBuffer.indexBuffer = create_device_buffer(indexBufferSize, indexBufferFlags, allocator);
+
+        const Buffer stagingBuffer = make_staging_buffer(vertexBufferSize + indexBufferSize, allocator);
+
+        void* data = stagingBuffer.info.pMappedData;
+
+        vmaMapMemory(allocator, stagingBuffer.allocation, &data);
+        memcpy(data, vertices.data(), vertexBufferSize);
+        memcpy(static_cast<char*>(data) + vertexBufferSize, indices.data(), indexBufferSize);
+        vmaUnmapMemory(allocator, stagingBuffer.allocation);
+
+        VkBufferDeviceAddressInfo bdaInfo{.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO};
+        bdaInfo.pNext = nullptr;
+        bdaInfo.buffer = vertexBuffer.vertexBuffer.handle;
+        VkDeviceAddress bda = vkGetBufferDeviceAddress(device.get_handle(), &bdaInfo);
+        vertexBuffer.vertexBufferAddress = bda;
+
+        context.begin();
+        context.copy_buffer(stagingBuffer, vertexBuffer.vertexBuffer, 0, 0, vertexBufferSize);
+        context.copy_buffer(stagingBuffer, vertexBuffer.indexBuffer, vertexBufferSize, 0, indexBufferSize);
+        context.end();
+
+        device.submit_upload_work(context, vk::PipelineStageFlagBits2::eNone, vk::PipelineStageFlagBits2::eCopy);
+
+        device.get_handle().destroyBuffer(stagingBuffer.handle);
+    }
+
     std::optional<fastgltf::Asset> SceneManager::load_gltf(const std::filesystem::path &path) const {
 
         fastgltf::Parser parser(fastgltf::Extensions::KHR_lights_punctual);
@@ -373,6 +533,425 @@ namespace vulkan {
         return gltf;
     }
 
+    MaterialHandle SceneManager::create_material(const fastgltf::Material &material) {
+                Material newMaterial;
+
+        newMaterial.baseColorFactor = glm::vec4(
+            material.pbrData.baseColorFactor.x(),
+            material.pbrData.baseColorFactor.y(),
+            material.pbrData.baseColorFactor.z(),
+            material.pbrData.baseColorFactor.w()
+            );
+
+        if (material.pbrData.baseColorTexture.has_value()) {
+            auto textureIndex = material.pbrData.baseColorTexture.value().textureIndex;
+            newMaterial.baseColorTexture = static_cast<TextureHandle>(textureIndex);
+        };
+
+        if (material.normalTexture.has_value()) {
+            auto textureIndex = material.normalTexture.value().textureIndex;
+            newMaterial.normalTexture = static_cast<TextureHandle>(textureIndex);
+        };
+
+        if (material.occlusionTexture.has_value()) {
+            auto textureIndex = material.occlusionTexture.value().textureIndex;
+            newMaterial.occlusionTexture = static_cast<TextureHandle>(textureIndex);
+        };
+
+        if (material.pbrData.metallicRoughnessTexture.has_value()) {
+            auto textureIndex = material.pbrData.metallicRoughnessTexture.value().textureIndex;
+            newMaterial.mrTexture = static_cast<TextureHandle>(textureIndex);
+        }
+
+        newMaterial.metalnessFactor = material.pbrData.metallicFactor;
+        newMaterial.roughnessFactor = material.pbrData.roughnessFactor;
+
+
+        if (material.emissiveTexture.has_value()) {
+            auto textureIndex = material.emissiveTexture.value().textureIndex;
+            newMaterial.emissiveTexture = static_cast<TextureHandle>(textureIndex);
+        }
+
+        newMaterial.emissiveStrength = material.emissiveStrength;
+        newMaterial.bufferOffset = materialCount * sizeof(GPUMaterial);
+
+        materials.push_back(newMaterial);
+        const auto handle = static_cast<MaterialHandle>(newMaterial.magicNumber << 16 | materialCount);
+
+        if (newMaterial.baseColorFactor.a < 1.0f) {
+            transparentMaterials.push_back(handle);
+        }
+        else {
+            opaqueMaterials.push_back(handle);
+        }
+
+        materialCount++;
+        return handle;
+    }
+
+    std::vector<MaterialHandle> SceneManager::create_materials(const fastgltf::Asset &asset) {
+        std::vector<MaterialHandle> materialHandles;
+        materialHandles.reserve(asset.materials.size());
+
+        materialBuffer = device.create_buffer(
+            sizeof(Material) * asset.materials.size(),
+            vk::BufferUsageFlagBits::eUniformBuffer | vk::BufferUsageFlagBits::eTransferDst,
+            VMA_MEMORY_USAGE_CPU_TO_GPU
+            );
+
+        for (const auto& material : asset.materials) {
+            materialHandles.emplace_back(create_material(material));
+        }
+
+        return materialHandles;
+    }
+
+    void SceneManager::build_material_buffer(u64 size) {
+        if (size > 0) {
+            materialBuffer = device.create_buffer(
+                sizeof(GPUMaterial) * size,
+                vk::BufferUsageFlagBits::eStorageBuffer |
+                vk::BufferUsageFlagBits::eShaderDeviceAddress |
+                vk::BufferUsageFlagBits::eTransferDst,
+                VMA_MEMORY_USAGE_CPU_TO_GPU
+                );
+
+            materialBufferSize = size * sizeof(GPUMaterial);
+
+            vk::BufferDeviceAddressInfo bdaInfo(materialBuffer.handle);
+            materialBufferAddress = device.get_handle().getBufferAddress(bdaInfo);
+        }
+    }
+
+    void SceneManager::update_material_buffer() {
+        auto* materialData = static_cast<GPUMaterial*>(materialBuffer.get_mapped_data());
+        for (u32 i = 0; i < materials.size(); i++) {
+            GPUMaterial gpuMaterial;
+            gpuMaterial.metalnessFactor = materials[i].metalnessFactor;
+            gpuMaterial.roughnessFactor = materials[i].roughnessFactor;
+            gpuMaterial.emissiveStrength = materials[i].emissiveStrength;
+            gpuMaterial.baseColorTexture = get_handle_index(materials[i].baseColorTexture);
+            gpuMaterial.mrTexture = get_handle_index(materials[i].mrTexture);
+            gpuMaterial.normalTexture = get_handle_index(materials[i].normalTexture);
+            gpuMaterial.emissiveTexture = get_handle_index(materials[i].emissiveTexture);
+            gpuMaterial.occlusionTexture = get_handle_index(materials[i].occlusionTexture);
+
+            materialData[i] = gpuMaterial;
+        }
+    }
+
+    MaterialType SceneManager::get_material_type(MaterialHandle handle) const {
+        if (std::ranges::find(opaqueMaterials, handle) != opaqueMaterials.end()) {
+            return opaque;
+        };
+        if (std::ranges::find(transparentMaterials, handle) != transparentMaterials.end()) {
+            return transparent;
+        }
+
+        return opaque;
+    }
+
+    Material & SceneManager::get_material(MaterialHandle handle) {
+        assert_handle(handle);
+        const u32 index = get_handle_index(handle);
+        return materials[index];
+    }
+
+    std::vector<TextureHandle> SceneManager::create_textures(
+        VkFormat format,
+        VkImageUsageFlags usage,
+        fastgltf::Asset &asset) {
+        std::vector<TextureHandle> handles;
+        std::vector<Image> images;
+        std::vector<std::vector<vk::BufferImageCopy>> copyRegions;
+        std::vector<ktxTexture*> ktxTexturePs;
+        u64 stagingBufferSize = 0;
+
+
+        const u64 numImages = asset.images.size();
+        handles.reserve(numImages);
+        images.reserve(numImages);
+
+        u32 index = 0;
+        for (auto& gltfImage : asset.images) {
+            Image newImage;
+            std::vector<vk::BufferImageCopy> newRegions;
+            std::visit(fastgltf::visitor {
+            [&](auto& arg) {},
+                [&](fastgltf::sources::URI& path) {
+                    std::string prepend = "../assets/";
+                    prepend.append(path.uri.c_str());
+
+                    ktxTexture* texture;
+
+                    const ktxResult result = ktxTexture_CreateFromNamedFile(
+                        prepend.c_str(),
+                        KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT,
+                        &texture
+                        );
+
+                    if (result != KTX_SUCCESS)
+                        throw std::runtime_error("Failed to load KTX texture " + prepend);
+
+                    ktxTexturePs.push_back(texture);
+
+                    const ku32 width = texture->baseWidth;
+                    const ku32 height = texture->baseHeight;
+                    const ku32 mipLevels = texture->numLevels;
+
+                    const vk::Extent3D extent { width, height, 1 };
+                    newImage = device.create_image(extent, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, mipLevels, true);
+                    images.push_back(newImage);
+
+                    for (u32 i = 0; i < mipLevels; i++) {
+                        ku64 imageOffset = stagingBufferSize;
+                        ku64 mipOffset;
+                        if (ktxTexture_GetImageOffset(texture, i, 0, 0, &mipOffset) == KTX_SUCCESS) {
+                            vk::BufferImageCopy copyRegion;
+                            ku64 offset = imageOffset + mipOffset;
+                            copyRegion.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+                            copyRegion.imageSubresource.mipLevel = i;
+                            copyRegion.imageSubresource.baseArrayLayer = 0;
+                            copyRegion.imageSubresource.layerCount = 1;
+                            copyRegion.imageExtent.width = std::max(1u, texture->baseWidth >> i);
+                            copyRegion.imageExtent.height = std::max(1u, texture->baseHeight >> i);
+                            copyRegion.imageExtent.depth = 1;
+                            copyRegion.bufferOffset = offset;
+
+                            newRegions.push_back(copyRegion);
+                        }
+                    }
+
+                    stagingBufferSize += texture->dataSize;
+            },
+
+            [&](fastgltf::sources::Array& array) {
+
+                ku8* ktxTextureData{};
+                ku64 textureSize{};
+                ktxTexture* texture;
+
+                const ktxResult result = ktxTexture_CreateFromMemory(ktxTextureData, textureSize, KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &texture);
+
+                if (result != KTX_SUCCESS) {
+                    throw std::runtime_error("Failed to load KTX texture");
+                }
+
+                const ku32 width = texture->baseWidth;
+                const ku32 height = texture->baseHeight;
+                const ku32 mipLevels = texture->numLevels;
+
+                const vk::Extent3D extent {width, height, 1};
+                newImage = device.create_image(extent, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, mipLevels, true);
+                images.push_back(newImage);
+
+                stagingBufferSize += textureSize;
+
+                for (u32 i = 0; i < mipLevels; i++) {
+                    ku64 offset;
+                    if (ktxTexture_GetImageOffset(texture, i, 0, 0, &offset) == KTX_SUCCESS) {
+                        vk::BufferImageCopy copyRegion;
+                        copyRegion.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+                        copyRegion.imageSubresource.mipLevel = i;
+                        copyRegion.imageSubresource.baseArrayLayer = 0;
+                        copyRegion.imageSubresource.layerCount = 1;
+                        copyRegion.imageExtent.width = std::max(1u, texture->baseWidth >> i);
+                        copyRegion.imageExtent.height = std::max(1u, texture->baseHeight >> i);
+                        copyRegion.imageExtent.depth = 1;
+                        copyRegion.bufferOffset = offset;
+
+                        newRegions.push_back(copyRegion);
+                    }
+                }
+            },
+
+            [&](fastgltf::sources::BufferView& view) {
+                auto& bufferView = asset.bufferViews[view.bufferViewIndex];
+                auto& buffer = asset.buffers[bufferView.bufferIndex];
+
+                std::visit(
+                    fastgltf::visitor {
+                        [&](auto& arg) {},
+                        [&](fastgltf::sources::Array& array) {
+                            const auto ktxTextureBytes = reinterpret_cast<const ku8*>(array.bytes.data() + bufferView.byteOffset);
+                            const auto byteLength = static_cast<i32>(bufferView.byteLength);
+
+                            ktxTexture* texture;
+                            const ktxResult result = ktxTexture_CreateFromMemory(
+                                ktxTextureBytes,
+                                byteLength,
+                                KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT,
+                                &texture
+                                );
+
+                            if (result != KTX_SUCCESS) {
+                                throw std::runtime_error("Failed to load KTX texture");
+                            }
+
+                            const ku32 width = texture->baseWidth;
+                            const ku32 height = texture->baseHeight;
+                            const ku32 mipLevels = texture->numLevels;
+                            const ku32 textureSize = texture->dataSize;
+
+                            const vk::Extent3D extent {width, height, 1};
+                            newImage = device.create_image(extent, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, mipLevels, true);
+                            images.push_back(newImage);
+
+                            const u64 dataSize = texture->dataSize;
+                            const ku8* textureData = texture->pData;
+                            stagingBufferSize += textureSize;
+
+                            for (u32 i = 0; i < mipLevels; i++) {
+                                ku64 offset;
+                                if (ktxTexture_GetImageOffset(texture, i, 0, 0, &offset) == KTX_SUCCESS) {
+                                    vk::BufferImageCopy copyRegion;
+                                    copyRegion.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+                                    copyRegion.imageSubresource.mipLevel = i;
+                                    copyRegion.imageSubresource.baseArrayLayer = 0;
+                                    copyRegion.imageSubresource.layerCount = 1;
+                                    copyRegion.imageExtent.width = std::max(1u, texture->baseWidth >> i);
+                                    copyRegion.imageExtent.height = std::max(1u, texture->baseHeight >> i);
+                                    copyRegion.imageExtent.depth = 1;
+                                    copyRegion.bufferOffset = offset;
+
+                                    newRegions.push_back(copyRegion);
+                                }
+                            }
+                        }
+                    }, buffer.data);
+            }
+        }, gltfImage.data);
+
+            index++;
+            newImage.magicNumber = textureCount;
+            const auto handle = static_cast<TextureHandle>(newImage.magicNumber << 16 | textureCount);
+            textureCount++;
+
+            handles.push_back(handle);
+            textures.push_back(newImage);
+            copyRegions.push_back(newRegions);
+        }
+
+        Buffer stagingBuffer = make_staging_buffer(stagingBufferSize, device.get_allocator());
+        void* stagingData = stagingBuffer.get_mapped_data();
+        std::vector<ku8> data;
+        data.reserve(stagingBufferSize);
+
+        for (auto currentTexture : ktxTexturePs) {
+            const ku64 size = currentTexture->dataSize;
+            const ku8* textureData = currentTexture->pData;
+            for (u64 j = 0; j < size; j++) {
+                data.push_back(textureData[j]);
+            }
+
+            ktxTexture_Destroy(currentTexture);
+        }
+
+        vmaMapMemory(device.get_allocator(), stagingBuffer.allocation, &stagingData);
+        memcpy(stagingData, data.data(), stagingBufferSize);
+        vmaUnmapMemory(device.get_allocator(), stagingBuffer.allocation);
+
+        device.wait_on_work();
+        context.begin();
+        for (u32 i = 0; i < ktxTexturePs.size(); i++) {
+            context.image_barrier(images[i].handle, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+            device.immediateCommandBuffer.copyBufferToImage(stagingBuffer.handle, images[i].handle, vk::ImageLayout::eTransferDstOptimal, copyRegions[i]);
+            context.image_barrier(images[i].handle, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+        }
+        context.end();
+        device.submit_upload_work(context, vk::PipelineStageFlagBits2::eNone, vk::PipelineStageFlagBits2::eCopy);
+
+        device.get_handle().destroyBuffer(stagingBuffer.handle);
+
+        return handles;
+    }
+
+    inline vk::Filter convert_filter(const fastgltf::Filter filter) {
+        switch (filter) {
+            case fastgltf::Filter::Nearest:
+            case fastgltf::Filter::NearestMipMapNearest:
+            case fastgltf::Filter::NearestMipMapLinear:
+                return vk::Filter::eNearest;
+
+            case fastgltf::Filter::Linear:
+            case fastgltf::Filter::LinearMipMapNearest:
+            case fastgltf::Filter::LinearMipMapLinear:
+            default:
+                return vk::Filter::eLinear;
+        }
+    }
+
+    inline vk::SamplerMipmapMode convert_mipmap_mode(const fastgltf::Filter filter) {
+        switch (filter) {
+            case fastgltf::Filter::NearestMipMapNearest:
+            case fastgltf::Filter::LinearMipMapNearest:
+                return vk::SamplerMipmapMode::eNearest;
+
+            case fastgltf::Filter::NearestMipMapLinear:
+            case fastgltf::Filter::LinearMipMapLinear:
+            default:
+                return vk::SamplerMipmapMode::eLinear;
+        }
+    }
+
+    SamplerHandle SceneManager::create_sampler(const fastgltf::Sampler &fastgltfSampler) {
+        vk::SamplerCreateInfo samplerInfo;
+        samplerInfo.magFilter = convert_filter(fastgltfSampler.magFilter.value_or(fastgltf::Filter::Nearest));
+        samplerInfo.minFilter = convert_filter(fastgltfSampler.minFilter.value_or(fastgltf::Filter::Nearest));
+        samplerInfo.maxLod = vk::LodClampNone;
+        samplerInfo.minLod = 0;
+        samplerInfo.mipmapMode = convert_mipmap_mode(fastgltfSampler.minFilter.value_or(fastgltf::Filter::Nearest));
+
+        auto magFilter = convert_filter(fastgltfSampler.magFilter.value_or(fastgltf::Filter::Nearest));
+        const auto minFilter = convert_filter(fastgltfSampler.minFilter.value_or(fastgltf::Filter::Nearest));
+        const auto mipMapMode = convert_mipmap_mode(fastgltfSampler.minFilter.value_or(magFilter));
+
+        Sampler newSampler = device.create_sampler(magFilter, minFilter, mipMapMode);
+        samplers.push_back(newSampler);
+
+        const auto handle = static_cast<SamplerHandle>(newSampler.magicNumber << 16 | textureCount);
+        samplerCount++;
+
+        return handle;
+    }
+
+    void SceneManager::delete_texture(TextureHandle handle) {
+        assert_handle(handle);
+        auto index = get_handle_index(handle);
+        auto& image = textures[index];
+        vmaDestroyImage(device.get_allocator(), image.handle, image.allocation);
+        textures.erase(textures.begin() + index);
+        textureCount--;
+    }
+
+    Image& SceneManager::get_texture(TextureHandle handle) {
+        assert_handle(handle);
+        const u32 index = get_handle_index(handle);
+        return textures[index];
+    }
+
+    Sampler & SceneManager::get_sampler(SamplerHandle handle) {
+        assert_handle(handle);
+        const u32 index = get_handle_index(handle);
+        Sampler& sampler = samplers[index];
+
+        return samplers[index];
+    }
+
+    void SceneManager::write_textures(DescriptorBuilder &builder) {
+        u32 i = 0;
+        for (const auto& texture : textures) {
+            const auto sampler = get_sampler(texture.sampler).sampler;
+            builder.write_image(i, texture.view, sampler, vk::ImageLayout::eShaderReadOnlyOptimal, vk::DescriptorType::eCombinedImageSampler);
+            i++;
+        }
+    }
+
+    void SceneManager::set_texture_sampler(TextureHandle textureHandle, SamplerHandle samplerHandle) {
+        auto texture = get_texture(textureHandle);
+        texture.sampler = samplerHandle;
+    }
+
     void SceneManager::assert_handle(const SceneHandle handle) const {
         const u32 metaData = get_handle_metadata(handle);
         const u32 index = get_handle_index(handle);
@@ -397,7 +976,62 @@ namespace vulkan {
         assert(lights[index].magicNumber == metaData && "Handle metadata does not match an existing light");
     }
 
+    void SceneManager::assert_handle(MaterialHandle handle) const {
+        const u32 metaData = get_handle_metadata(handle);
+        const u32 index = get_handle_index(handle);
+
+        assert(index < materials.size());
+        assert(materials[index].magicNumber == metaData);
+    }
+
+    void SceneManager::assert_handle(MeshHandle handle) const {
+        const u32 metaData = get_handle_metadata(handle);
+        const u32 index = get_handle_index(handle);
+
+        assert(index < meshes.size() && "Mesh index out of range");
+        assert(meshes[index].magicNumber == metaData && "Mesh metadata doesn't match");
+    }
+
+    void SceneManager::assert_handle(VertexBufferHandle handle) const {
+        const u32 metaData = get_handle_metadata(handle);
+        const u32 index = get_handle_index(handle);
+
+        assert(index < vertexBuffers.size() && "Vertex buffer index out of range");
+        assert(vertexBuffers[index].magicNumber == metaData && "Vertex buffer metadata doesn't match");
+    }
+
+    void SceneManager::assert_handle(TextureHandle handle) const {
+        const u32 metaData = get_handle_metadata(handle);
+        const u32 index = get_handle_index(handle);
+
+        assert(index < textures.size());
+        assert(textures[index].magicNumber == metaData);
+    }
+
+    void SceneManager::assert_handle(SamplerHandle handle) const {
+        const u32 metaData = get_handle_metadata(handle);
+        const u32 index = get_handle_index(handle);
+
+        assert(index < samplers.size());
+        assert(samplers[index].magicNumber == metaData);
+    }
+
     void SceneManager::release_gpu_resources() {
         vmaDestroyBuffer(device.get_allocator(), lightBuffer.handle, lightBuffer.allocation);
+        vmaDestroyBuffer(device.get_allocator(), materialBuffer.handle, materialBuffer.allocation);
+
+        for (auto& vertexBuffer : vertexBuffers) {
+            vmaDestroyBuffer(device.get_allocator(), vertexBuffer.vertexBuffer.handle, vertexBuffer.vertexBuffer.allocation);
+            vmaDestroyBuffer(device.get_allocator(), vertexBuffer.indexBuffer.handle, vertexBuffer.indexBuffer.allocation);
+        }
+
+        for (auto& texture : textures) {
+            vmaDestroyImage(device.get_allocator(), texture.handle, texture.allocation);
+            vkDestroyImageView(device.get_handle(), texture.view, nullptr);
+        }
+
+        for (auto& sampler : samplers) {
+            vkDestroySampler(device.get_handle(), sampler.sampler, nullptr);
+        }
     }
 }

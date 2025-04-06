@@ -1,8 +1,6 @@
 #pragma once
 
 #include "resources.h"
-#include "resources/texturemanager.h"
-#include "resources/meshmanager.h"
 #include "glmdefines.h"
 
 namespace vulkan {

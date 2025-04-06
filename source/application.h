@@ -63,9 +63,5 @@ private:
     vulkan::SceneHandle testScene;
 
     std::unique_ptr<vulkan::DescriptorBuilder> descriptorBuilder;
-
     std::unique_ptr<vulkan::SceneManager> sceneManager;
-    std::unique_ptr<vulkan::TextureManager> textureManager;
-    std::unique_ptr<vulkan::MaterialManager> materialManager;
-    std::unique_ptr<vulkan::MeshManager> meshManager;
 };

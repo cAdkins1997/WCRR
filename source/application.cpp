@@ -54,18 +54,12 @@ Application::Application(vulkan::Device& _device) : device(_device) {
 
     vulkan::UploadContext uploadContext(device.get_handle(), device.immediateCommandBuffer, device.get_allocator());
     sceneManager = std::make_unique<vulkan::SceneManager>(device, uploadContext);
-    textureManager = std::make_unique<vulkan::TextureManager>(vulkan::TextureManager(device, uploadContext, 1));
-    materialManager = std::make_unique<vulkan::MaterialManager>(vulkan::MaterialManager(device, 1));
-    meshManager = std::make_unique<vulkan::MeshManager>(vulkan::MeshManager(device, uploadContext, 1));
     init();
     run();
 }
 
 Application::~Application() {
     vkDeviceWaitIdle(device.get_handle());
-    meshManager->release_gpu_resources();
-    textureManager->release_gpu_resources();
-    materialManager->release_gpu_resources();
     sceneManager->release_gpu_resources();
     descriptorBuilder->release_descriptor_resources();
     device.get_handle().destroyPipeline(opaquePipeline.pipeline);
@@ -122,7 +116,7 @@ void Application::draw() {
     graphicsContext.set_viewport(extent, 0.0f, 1.0f);
     graphicsContext.set_scissor(extent);
 
-    sceneManager->draw_scene(graphicsContext, *meshManager, *materialManager, testScene);
+    sceneManager->draw_scene(graphicsContext, testScene);
 
     graphicsContext._commandBuffer.endRendering();
 
@@ -155,7 +149,7 @@ void Application::init_descriptors() {
     transparentPipeline.set = globalSet;
     descriptorBuilder->write_buffer(sceneDataBuffer.handle, sizeof(SceneData), 0, vk::DescriptorType::eUniformBuffer);
 
-    textureManager->write_textures(*descriptorBuilder);
+    sceneManager->write_textures(*descriptorBuilder);
 
     descriptorBuilder->update_set(opaquePipeline.set);
 
@@ -245,7 +239,7 @@ void Application::init_scene_resources() {
         );
 
     if (auto gltf = sceneManager->load_gltf("../assets/NewSponza_Main_glTF_003.gltf"); gltf.has_value()) {
-        testScene = sceneManager->create_scene(gltf.value(), *meshManager, *textureManager, *materialManager);
+        testScene = sceneManager->create_scene(gltf.value());
         update();
     }
 

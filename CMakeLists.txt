@@ -22,14 +22,8 @@ add_executable(${PROJECT_NAME}
         source/application.h
         source/scene/camera.cpp
         source/scene/camera.h
-        source/resources/texturemanager.cpp
-        source/resources/texturemanager.h
         source/resources/resourcehelpers.cpp
         source/resources/resourcehelpers.h
-        source/resources/meshmanager.cpp
-        source/resources/meshmanager.h
-        source/resources/materialmanager.cpp
-        source/resources/materialmanager.h
         source/resources/scenemanager.cpp
         source/resources/scenemanager.h
         source/pipelines/descriptors.cpp
