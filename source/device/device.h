@@ -5,11 +5,12 @@
 #include "../resources/scenemanager.h"
 #include "../glmdefines.h"
 
+#include <GLFW/glfw3.h>
+
 #include <filesystem>
 #include <fstream>
 #include <ranges>
 #include <set>
-#include <GLFW/glfw3.h>
 #include <cmath>
 #include <functional>
 #include <iostream>
@@ -60,7 +61,7 @@ namespace vulkan {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
         VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
         VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
-        VK_EXT_ROBUSTNESS_2_EXTENSION_NAME,
+        //VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME
         //VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME
     };
 
@@ -115,13 +116,15 @@ namespace vulkan {
         Image& get_draw_image() { return drawImage; }
         Image& get_depth_image() { return depthImage; }
         vk::Image& get_swapchain_image();
-        vk::Extent3D get_swapchain_extent() const { return {swapchainExtent.width, swapchainExtent.height, 1}; }
+        vk::Extent3D get_swapchain_extent() const { return {swapchainExtent.width, swapchainExtent.height}; }
+        vk::Format get_swapchain_format() const { return swapchainFormat; }
         [[nodiscard]] GLFWwindow* get_window() const { return window; }
 
         [[nodiscard]] u32 get_width() const { return width; }
         [[nodiscard]] u32 get_height() const { return height; }
 
         [[nodiscard]] VmaAllocator &get_allocator() { return allocator; }
+        [[nodiscard]] vk::Instance &get_instance() { return instance; }
         u32 get_swapchain_image_index();
 
         DeletionQueue deviceDeletionQueue;
@@ -142,6 +145,7 @@ namespace vulkan {
         void init_allocator();
         void init_draw_images();
         void init_depth_images();
+        void init_imgui();
 
     private:
         std::vector<const char*> get_required_extensions();
@@ -169,6 +173,7 @@ namespace vulkan {
         vk::CommandPool immediateCommandPool;
         vk::CommandBuffer immediateCommandBuffer;
         std::vector<vk::Image> swapchainImages{};
+        std::vector<vk::ImageView> swapchainImageViews;
 
     private:
         u32 width{}, height{};
@@ -178,7 +183,6 @@ namespace vulkan {
         vk::SwapchainKHR swapchain{};
         vk::Format swapchainFormat{};
         vk::Extent2D swapchainExtent;
-        std::vector<vk::ImageView> swapchainImageViews;
         u32 swapchainImageIndex = 0;
 
         Image drawImage;

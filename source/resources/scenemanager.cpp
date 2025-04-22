@@ -29,7 +29,9 @@ namespace vulkan {
             auto& node = nodes[index];
             auto& mesh = get_mesh(node.mesh);
 
-            const u32 numLights = static_cast<u32>(scene.lights.size());
+            const u32 numDirLights = static_cast<u32>(scene.dirLights.size());
+            const u32 numSpotLights = static_cast<u32>(scene.spotLights.size());
+            const u32 numPointLights = static_cast<u32>(scene.pointLights.size());
 
             for (const auto& surface : mesh.surfaces) {
                 const auto material = get_handle_index(surface.material);
@@ -37,11 +39,15 @@ namespace vulkan {
                 pc.renderMatrix = node.worldMatrix;
                 pc.vertexBuffer = vertexBuffer.vertexBufferAddress;
                 pc.materialBuffer = materialBuffer;
-                pc.lightBuffer = lightBufferAddress;
+                pc.pointLightBuffer = pointLightBufferAddress;
+                pc.spotLightBuffer = spotLightBufferAddress;
+                pc.dirLightBuffer = dirLightBufferAddress;
                 pc.materialIndex = material;
-                pc.numLights = numLights;
+                pc.numDirLights = numDirLights;
+                pc.numSpotLights = numSpotLights;
+                pc.numPointLights = numPointLights;
 
-                graphicsContext.set_push_constants(&pc, sizeof(pc), vk::ShaderStageFlagBits::eAll);
+                graphicsContext.set_push_constants(&pc, sizeof(pc), vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
                 graphicsContext.draw(surface.indexCount, surface.initialIndex);
             }
         }
@@ -76,12 +82,12 @@ namespace vulkan {
 
         const auto handle = static_cast<NodeHandle>(newNode.magicNumber << 16 | nodeCount);
 
-        if (gltfNode.lightIndex.has_value()) {
+        /*if (gltfNode.lightIndex.has_value()) {
             auto& light = lights[gltfNode.lightIndex.value()];
             light.node = handle;
             const u16 metaData = light.magicNumber;
             newNode.light = static_cast<NodeHandle>(metaData << 16 | gltfNode.lightIndex.value());
-        }
+        }*/
 
         if (gltfNode.meshIndex.has_value()) {
             const u16 metaData = get_metadata_at_index(gltfNode.meshIndex.value());
@@ -111,9 +117,19 @@ namespace vulkan {
             newScene.samplers.push_back(sampler);
         }
 
-        newScene.lights.reserve(asset.lights.size());
+        newScene.dirLights.reserve(asset.lights.size());
+        newScene.pointLights.reserve(asset.lights.size());
+        newScene.spotLights.reserve(asset.lights.size());
         for (const auto& light : asset.lights) {
-            newScene.lights.push_back(create_light(light));
+            if (light.type == fastgltf::LightType::Directional) {
+                 create_directional_light(light);
+            }
+            else if (light.type == fastgltf::LightType::Point) {
+                create_point_light(light);
+            }
+            else if (light.type == fastgltf::LightType::Spot) {
+                create_spot_light(light);
+            }
         }
 
         newScene.nodes.reserve(asset.scenes.size());
@@ -151,8 +167,22 @@ namespace vulkan {
             }
         }
 
-        build_light_buffer(asset.lights.size());
-        update_light_buffer();
+        if (auto result = build_light_buffer(directionalLightBuffer, Directional, directionalLights.size()); result.has_value()) {
+            dirLightBufferAddress = result.value();
+            directionalLightBufferSize = sizeof(DirectionalLight) * directionalLights.size();
+        }
+        if (auto result = build_light_buffer(spotLightBuffer, Spot, spotLights.size()); result.has_value()) {
+            spotLightBufferAddress = result.value();
+            spotLightBufferSize = sizeof(DirectionalLight) * directionalLights.size();
+        }
+        if (auto result = build_light_buffer(pointLightBuffer, Point, pointLights.size()); result.has_value()) {
+            pointLightBufferAddress = result.value();
+            pointLightBufferSize = sizeof(DirectionalLight) * directionalLights.size();
+        }
+
+        update_light_buffer(directionalLightBuffer, Directional, directionalLights.size());
+        update_light_buffer(spotLightBuffer, Spot, spotLights.size());
+        update_light_buffer(pointLightBuffer, Point, pointLights.size());
 
         auto textureHandles = create_textures(
                 VK_FORMAT_BC7_SRGB_BLOCK,
@@ -195,93 +225,102 @@ namespace vulkan {
         return handle;
     }
 
-    LightHandle SceneManager::create_light(const fastgltf::Light& gltfLight) {
-        Light newLight{};
-        newLight.magicNumber = currentLight;
-        newLight.colour = glm::vec3(gltfLight.color.x(), gltfLight.color.y(), gltfLight.color.z());
-        newLight.intensity = gltfLight.intensity;
-        if (newLight.intensity <= 0.0f) newLight.intensity = 0.01f;
+    void SceneManager::create_directional_light(const fastgltf::Light &gltfLight) {
+        GPUDirectionalLight directionalLight;
+        directionalLight.colour = glm::vec3(gltfLight.color.x(), gltfLight.color.y(), gltfLight.color.z());
+        directionalLights.push_back(directionalLight);
+    }
 
-        if (gltfLight.range.has_value()) {
-            newLight.range = gltfLight.range.value();
-        }
-        if (gltfLight.type == fastgltf::LightType::Directional) {
-            newLight.type = Directional;
-        }
-        else if (gltfLight.type == fastgltf::LightType::Point) {
-            newLight.type = Point;
-        }
-        else if (gltfLight.type == fastgltf::LightType::Spot) {
-            newLight.type = Spot;
-        }
+    void SceneManager::create_point_light(const fastgltf::Light &gltfLight) {
+        GPUPointLight pointLight;
+        pointLight.colour = glm::vec3(gltfLight.color.x(), gltfLight.color.y(), gltfLight.color.z());
+        pointLight.intensity = gltfLight.intensity;
+        if (pointLight.intensity <= 0.0f) pointLight.intensity = 0.01f;
+        pointLights.push_back(pointLight);
+    }
+
+    void SceneManager::create_spot_light(const fastgltf::Light& gltfLight) {
+        GPUSpotLight spotLight;
+        spotLight.colour = glm::vec3(gltfLight.color.x(), gltfLight.color.y(), gltfLight.color.z());
+        spotLight.intensity = gltfLight.intensity;
+        if (spotLight.intensity <= 0.0f) spotLight.intensity = 0.01f;
         if (gltfLight.innerConeAngle.has_value()) {
-            newLight.innerAngle = gltfLight.innerConeAngle.value();
+            spotLight.innerAngle = gltfLight.innerConeAngle.value();
         }
         if (gltfLight.outerConeAngle.has_value()) {
-            newLight.outerAngle = gltfLight.outerConeAngle.value();
+            spotLight.outerAngle = gltfLight.outerConeAngle.value();
         }
-
-        newLight.name = gltfLight.name;
-        lights.push_back(newLight);
-
-        const auto handle = static_cast<LightHandle>(newLight.magicNumber << 16 | nodeCount);
-        lightCount++;
-        currentLight++;
-
-        return handle;
+        spotLights.push_back(spotLight);
     }
 
-    LightHandle SceneManager::create_point_light(glm::vec3 direction, glm::vec3 colour, f32 intensity, f32 range) {
-        Light newLight;
-        newLight.direction = direction;
-        newLight.magicNumber = currentLight;
-        newLight.colour = colour;
-        newLight.intensity = intensity;
-        newLight.range = range;
-        newLight.type = Point;
-        newLight.name = "Manual Point Light #" + std::to_string(currentLight);
-
-        lights.push_back(newLight);
-
-        const auto handle = static_cast<LightHandle>(newLight.magicNumber << 16 | nodeCount);
-        lightCount++;
-        currentLight++;
-
-        return handle;
-    }
-
-    void SceneManager::build_light_buffer(const u64 size) {
+    std::optional<vk::DeviceAddress> SceneManager::build_light_buffer(Buffer& buffer, LightType type, const u64 size) const {
         if (size > 0) {
-            lightBuffer = device.create_buffer(
-                sizeof(GPULight) * size,
+            u32 bufferSize = 0;
+            if (type == Directional) {
+                bufferSize = sizeof(DirectionalLight) * size;
+            }
+            if (type == Point) {
+                bufferSize = sizeof(PointLight) * size;
+            }
+
+            if (type == Spot) {
+                bufferSize = sizeof(SpotLight) * size;
+            }
+
+            buffer = device.create_buffer(
+                bufferSize,
                 vk::BufferUsageFlagBits::eStorageBuffer |
                 vk::BufferUsageFlagBits::eShaderDeviceAddress |
                 vk::BufferUsageFlagBits::eTransferDst,
                 VMA_MEMORY_USAGE_CPU_TO_GPU
                 );
 
-            lightBufferSize = size * sizeof(GPULight);
-            vk::BufferDeviceAddressInfo bdaInfo(lightBuffer.handle);
-            lightBufferAddress = device.get_handle().getBufferAddress(bdaInfo);
+            vk::BufferDeviceAddressInfo bdaInfo(buffer.handle);
+            return device.get_handle().getBufferAddress(bdaInfo);
+        }
+
+        return {};
+    }
+
+    void SceneManager::update_light_buffer(Buffer& lightBuffer, LightType type, const u64 size) {
+        if (size > 0) {
+            u32 bufferSize = 0;
+            if (type == Directional) {
+                bufferSize = sizeof(GPUDirectionalLight) * size;
+                auto data = static_cast<GPUDirectionalLight*>(lightBuffer.get_mapped_data());
+                for (u32 i = 0; i < size; i++) {
+                    data[i].colour = directionalLights[i].colour;
+                    data[i].direction = directionalLights[i].direction;
+                }
+            }
+            else if (type == Point) {
+                bufferSize = sizeof(PointLight) * size;
+                auto data = static_cast<GPUPointLight*>(lightBuffer.get_mapped_data());
+                for (u32 i = 0; i < size; i++) {
+                    data[i].colour = pointLights[i].colour;
+                    data[i].position = pointLights[i].position;
+                    data[i].intensity = pointLights[i].intensity;
+                }
+            }
+            else if (type == Spot) {
+                bufferSize = sizeof(SpotLight) * size;
+                auto data = static_cast<GPUSpotLight*>(lightBuffer.get_mapped_data());
+                for (u32 i = 0; i < size; i++) {
+                    data[i].colour = spotLights[i].colour;
+                    data[i].position = spotLights[i].position;
+                    data[i].intensity = spotLights[i].intensity;
+                    data[i].direction = spotLights[i].direction;
+                    data[i].innerAngle = spotLights[i].innerAngle;
+                    data[i].outerAngle = spotLights[i].outerAngle;
+                }
+            }
         }
     }
 
-    void SceneManager::update_light_buffer() {
-        if (lightBufferSize > 0) {
-            auto* lightData = static_cast<GPULight*>(lightBuffer.get_mapped_data());
-            for (u32 i = 0; i < lights.size(); i++) {
-                GPULight gpuLight;
-                gpuLight.direction = lights[i].direction;
-                gpuLight.colour = lights[i].colour;
-                gpuLight.intensity = lights[i].intensity;
-                gpuLight.range = lights[i].range;
-                gpuLight.type = lights[i].type;
-                gpuLight.innerAngle = lights[i].innerAngle;
-                gpuLight.outerAngle = lights[i].outerAngle;
-                lightData[i] = gpuLight;
-            }
-            context.update_uniform(lightData, lightBufferSize, lightBuffer);
-        }
+    void SceneManager::update_light_buffers() {
+        update_light_buffer(spotLightBuffer, Spot, spotLights.size());
+        update_light_buffer(pointLightBuffer, Point, pointLights.size());
+        update_light_buffer(directionalLightBuffer, Directional, directionalLights.size());
     }
 
 
@@ -311,11 +350,11 @@ namespace vulkan {
         return scenes[index];
     }
 
-    Light& SceneManager::get_light(const LightHandle handle) {
+    /*Light& SceneManager::get_light(const LightHandle handle) {
         assert_handle(handle);
         const u32 index = get_handle_index(handle);
         return lights[index];
-    }
+    }*/
 
     MeshHandle SceneManager::create_mesh(const fastgltf::Mesh &gltfMesh, const VertexBuffer &vertexBuffer) {
         Mesh newMesh;
@@ -329,7 +368,7 @@ namespace vulkan {
     }
 
     std::vector<MeshHandle> SceneManager::create_meshes(const fastgltf::Asset &asset) {
-                VertexBuffer vertexBuffer;
+        VertexBuffer vertexBuffer;
         indices.clear();
         vertices.clear();
 
@@ -968,13 +1007,13 @@ namespace vulkan {
         assert(nodes[index].magicNumber == metaData && "Handle metadata does not match an existing node");
     }
 
-    void SceneManager::assert_handle(const LightHandle handle) const {
+    /*void SceneManager::assert_handle(const LightHandle handle) const {
         const u32 metaData = get_handle_metadata(handle);
         const u32 index = get_handle_index(handle);
 
         assert(index <= scenes.size() && "Handle out of bounds");
         assert(lights[index].magicNumber == metaData && "Handle metadata does not match an existing light");
-    }
+    }*/
 
     void SceneManager::assert_handle(MaterialHandle handle) const {
         const u32 metaData = get_handle_metadata(handle);
@@ -1017,7 +1056,10 @@ namespace vulkan {
     }
 
     void SceneManager::release_gpu_resources() {
-        vmaDestroyBuffer(device.get_allocator(), lightBuffer.handle, lightBuffer.allocation);
+        vmaDestroyBuffer(device.get_allocator(), directionalLightBuffer.handle, directionalLightBuffer.allocation);
+        vmaDestroyBuffer(device.get_allocator(), spotLightBuffer.handle, spotLightBuffer.allocation);
+        vmaDestroyBuffer(device.get_allocator(), pointLightBuffer.handle, pointLightBuffer.allocation);
+
         vmaDestroyBuffer(device.get_allocator(), materialBuffer.handle, materialBuffer.allocation);
 
         for (auto& vertexBuffer : vertexBuffers) {

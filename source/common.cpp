@@ -1,10 +1,7 @@
 #include "common.h"
 
 #define VMA_IMPLEMENTATION
-#include <vk_mem_alloc.h>
-
-struct traced_new_tag_t {};
-constexpr traced_new_tag_t traced_new_tag;
+#include <vma/vk_mem_alloc.h>
 
 #include <iostream>
 

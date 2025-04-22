@@ -467,7 +467,7 @@ namespace vulkan {
 
     void GraphicsContext::bind_vertex_buffer(const vulkan::Buffer &vertexBuffer) const {
         vk::DeviceSize offsets[] = {0};
-        _commandBuffer.bindVertexBuffers(0, (vk::Buffer)vertexBuffer.handle, offsets);
+        _commandBuffer.bindVertexBuffers(0, static_cast<vk::Buffer>(vertexBuffer.handle), offsets);
     }
 
     void GraphicsContext::set_push_constants(const void *pPushConstants, const u64 size, const vk::ShaderStageFlags shaderStage) const {

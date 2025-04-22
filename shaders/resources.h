@@ -23,18 +23,26 @@ struct Material {
     uint emissiveTexture;
 };
 
-const uint Directional = 0x00000001u;
-const uint Point = 0x00000002u;
-const uint Spot = 0x00000004u;
-
-struct Light {
+struct DirectionalLight {
     vec3 direction;
-    vec3 colour;
-    float intensity;
-    float range;
-    float innerAngle;
-    float outerAngle;
-    uint type;
+    vec3 color;
+};
+
+struct PointLight {
+  vec3 position;
+  vec3 color;
+  float intensity;
+  float quadratic;
+};
+
+struct SpotLight {
+  vec3 position;
+  vec3 direction;
+  vec3 color;
+  float intensity;
+  float quadratic;
+  float innerAngle;
+  float outerAngle;
 };
 
 layout(buffer_reference, std430) readonly buffer VertexBuffer {
@@ -45,17 +53,29 @@ layout(buffer_reference, std430) readonly buffer MaterialBuffer {
     Material materials[];
 };
 
-layout(buffer_reference, std430) readonly buffer LightBuffer {
-    Light lights[];
+layout(buffer_reference, std430) readonly buffer DirectionalLightBuffer {
+    DirectionalLight lights[];
+};
+
+layout(buffer_reference, std430) readonly buffer PointLightBuffer {
+    PointLight lights[];
+};
+
+layout(buffer_reference, std430) readonly buffer SpotLightBuffer {
+    SpotLight lights[];
 };
 
 layout( push_constant ) uniform constants {
     mat4 renderMatrix;
     VertexBuffer vertexBuffer;
     MaterialBuffer materialBuffer;
-    LightBuffer lightBuffer;
+    DirectionalLightBuffer directionalLightBuffer;
+    PointLightBuffer pointLightBuffer;
+    SpotLightBuffer spotLightBuffer;
     uint materialIndex;
-    uint numLights;
+    uint numDirLights;
+    uint numPointLights;
+    uint numSpotLights;
 } PushConstants;
 
 layout(binding = 0) uniform SceneData {

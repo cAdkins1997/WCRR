@@ -115,23 +115,62 @@ namespace vulkan {
         LightType type;
     };
 
-    struct GPULight {
+    struct DirectionalLight {
         glm::vec3 direction{};
-        glm::vec3 colour;
-        f32 intensity;
-        f32 range;
-        f32 innerAngle;
-        f32 outerAngle;
-        LightType type;
+        glm::vec3 colour{};
+        f32 intensity{}, quadratic{};
+        NodeHandle node{};
+        u16 magicNumber{};
+    };
+
+    struct PointLight {
+        glm::vec3 position{};
+        glm::vec3 colour{};
+        f32 intensity{}, quadratic{};
+        NodeHandle node{};
+        u16 magicNumber{};
+    };
+
+    struct SpotLight {
+        glm::vec3 position{};
+        glm::vec3 direction{};
+        glm::vec3 colour{};
+        f32 intensity{}, quadratic{};
+        f32 innerAngle{}, outerAngle{};
+        NodeHandle node{};
+        u16 magicNumber{};
+    };
+
+    struct GPUDirectionalLight {
+        glm::vec3 direction{};
+        glm::vec3 colour{};
+    };
+
+    struct GPUPointLight {
+        glm::vec3 position{};
+        glm::vec3 colour{};
+        f32 intensity{}, quadratic{};
+    };
+
+    struct GPUSpotLight {
+        glm::vec3 position{};
+        glm::vec3 direction{};
+        glm::vec3 colour{};
+        f32 intensity{}, quadratic{};
+        f32 innerAngle{}, outerAngle{};
     };
 
     struct PushConstants {
         glm::mat4 renderMatrix;
         vk::DeviceAddress vertexBuffer;
         vk::DeviceAddress materialBuffer;
-        vk::DeviceAddress lightBuffer;
+        vk::DeviceAddress dirLightBuffer;
+        vk::DeviceAddress pointLightBuffer;
+        vk::DeviceAddress spotLightBuffer;
         u32 materialIndex;
-        u32 numLights;
+        u32 numDirLights;
+        u32 numPointLights;
+        u32 numSpotLights;
     };
 
     struct Node {
@@ -157,7 +196,9 @@ namespace vulkan {
         std::vector<MaterialHandle> materials;
         std::vector<SamplerHandle> samplers;
         std::vector<TextureHandle> textures;
-        std::vector<LightHandle> lights;
+        std::vector<LightHandle> dirLights;
+        std::vector<LightHandle> pointLights;
+        std::vector<LightHandle> spotLights;
         u16 magicNumber{};
     };
 
@@ -173,23 +214,33 @@ namespace vulkan {
 
         NodeHandle create_node(fastgltf::Node gltfNode);
         SceneHandle create_scene(fastgltf::Asset& asset);
-        LightHandle create_light(const fastgltf::Light& gltfLight);
-        LightHandle create_point_light(glm::vec3 direction, glm::vec3 colour, f32 intensity, f32 range);
+        void create_directional_light(const fastgltf::Light& gltfLight);
+        void create_point_light(const fastgltf::Light& gltfLight);
+        void create_spot_light(const fastgltf::Light& gltfLight);
 
-        void build_light_buffer(u64 size);
-        void update_light_buffer();
+        std::optional<vk::DeviceAddress> build_light_buffer(Buffer& buffer, LightType type, const u64 size) const;
+        void update_light_buffer(Buffer& lightBuffer, LightType type, u64 size);
+        void update_light_buffers();
 
         void remove_node(NodeHandle handle);
         void remove_scene(SceneHandle handle);
 
         Node& get_node(NodeHandle handle);
         Scene& get_scene(SceneHandle handle);
-        Light& get_light(LightHandle handle);
-        [[nodiscard]] u32 get_num_lights() const { return lights.size(); }
+        //Light& get_light(LightHandle handle);
+        [[nodiscard]] u32 get_num_lights() const { return directionalLights.size() + spotLights.size() + pointLights.size(); }
+        [[nodiscard]] u32 get_num_dirlights() const { return directionalLights.size(); }
+        [[nodiscard]] u32 get_num_spotlights() const { return spotLights.size(); }
+        [[nodiscard]] u32 get_num_pointlights() const { return pointLights.size(); }
 
-        Buffer& get_light_buffer() { return lightBuffer; }
-        u32 get_light_buffer_size() const { return lightBufferSize; }
-        vk::DeviceAddress get_light_buffer_address() const { return lightBufferAddress; }
+        //[[nodiscard]] Light* get_all_lights() { return lights.data(); }
+
+        //Buffer& get_light_buffer() { return lightBuffer; }
+        //[[nodiscard]] u32 get_light_buffer_size() const { return lightBufferSize; }
+        //[[nodiscard]] vk::DeviceAddress get_light_buffer_address() const { return lightBufferAddress; }
+        GPUDirectionalLight* get_dir_lights() { return directionalLights.data(); }
+        GPUPointLight* get_point_lights() { return pointLights.data(); }
+        GPUSpotLight* get_spot_lights() { return spotLights.data(); }
 
         MeshHandle create_mesh(const fastgltf::Mesh& gltfMesh, const VertexBuffer& vertexBuffer);
         std::vector<MeshHandle> create_meshes(const fastgltf::Asset &asset);
@@ -197,7 +248,7 @@ namespace vulkan {
         Mesh& get_mesh(MeshHandle handle);
         VertexBuffer& get_vertex_buffer(u32 index);
 
-        u16 get_metadata_at_index(u32 index) const;
+        [[nodiscard]] u16 get_metadata_at_index(u32 index) const;
         void upload_vertex_buffer(VertexBuffer& vertexBuffer) const;
 
 
@@ -245,12 +296,21 @@ namespace vulkan {
         u32 nodeCount = 0;
 
         //light data
-        std::vector<Light> lights;
-        Buffer lightBuffer;
-        vk::DeviceAddress lightBufferAddress{};
-        u32 lightBufferSize = 0;
-        u32 lightCount = 0;
-        u16 currentLight = 0;
+        std::vector<GPUDirectionalLight> directionalLights;
+    public:
+        std::vector<GPUPointLight> pointLights;
+    private:
+        std::vector<GPUSpotLight> spotLights;
+        Buffer directionalLightBuffer;
+        Buffer pointLightBuffer;
+        Buffer spotLightBuffer;
+        vk::DeviceAddress dirLightBufferAddress{}, pointLightBufferAddress{}, spotLightBufferAddress{};
+        u32 spotLightBufferSize = 0;
+        u32 pointLightBufferSize = 0;
+        u32 directionalLightBufferSize = 0;
+        u16 currentSpotLight = 0;
+        u16 currentPointLight = 0;
+        u16 currentDirectionalLight = 0;
 
         //mesh data
         std::vector<VertexBuffer> vertexBuffers;
@@ -280,7 +340,7 @@ namespace vulkan {
 
         void assert_handle(SceneHandle handle) const;
         void assert_handle(NodeHandle handle) const;
-        void assert_handle(LightHandle handle) const;
+        //void assert_handle(LightHandle handle) const;
         void assert_handle(MaterialHandle handle) const;
         void assert_handle(MeshHandle handle) const;
         void assert_handle(VertexBufferHandle vertexBuffer) const;

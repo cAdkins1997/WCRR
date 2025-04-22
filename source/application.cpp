@@ -4,6 +4,10 @@
 #include "pipelines/descriptors.h"
 #include "pipelines/pipelineBuilder.h"
 
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_vulkan.h>
+
 void mouse_callback(GLFWwindow *window, double xposIn, double yposIn) {
     auto xpos = static_cast<float>(xposIn);
     auto ypos = static_cast<float>(yposIn);
@@ -50,7 +54,7 @@ Application::Application(vulkan::Device& _device) : device(_device) {
     glfwMakeContextCurrent(device.get_window());
     glfwSetCursorPosCallback(device.get_window(), mouse_callback);
     glfwSetScrollCallback(device.get_window(),  process_scroll);
-    glfwSetInputMode(device.get_window(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    glfwSetInputMode(device.get_window(), GLFW_CURSOR, GLFW_CURSOR_CAPTURED);
 
     vulkan::UploadContext uploadContext(device.get_handle(), device.immediateCommandBuffer, device.get_allocator());
     sceneManager = std::make_unique<vulkan::SceneManager>(device, uploadContext);
@@ -86,6 +90,7 @@ void Application::draw() {
 
     const u32 index = device.get_swapchain_image_index();
     const vk::Image& currentSwapchainImage = device.swapchainImages[index];
+    const vk::ImageView& currentSwapchainImageView = device.swapchainImageViews[index];
 
     vk::CommandBuffer& commandBuffer = currentFrame.commandBuffer;
 
@@ -122,8 +127,11 @@ void Application::draw() {
 
     graphicsContext.image_barrier(drawImage.handle, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eTransferSrcOptimal);
     graphicsContext.image_barrier(currentSwapchainImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+
     graphicsContext.copy_image(drawImage.handle, currentSwapchainImage, drawImage.extent, device.get_swapchain_extent());
-    graphicsContext.image_barrier(currentSwapchainImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::ePresentSrcKHR);
+    graphicsContext.image_barrier(currentSwapchainImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eColorAttachmentOptimal);
+    draw_imgui(graphicsContext, currentSwapchainImage, currentSwapchainImageView, extent);
+    graphicsContext.image_barrier(currentSwapchainImage, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR);
     graphicsContext.end();
 
     device.submit_graphics_work(graphicsContext, vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::PipelineStageFlagBits2::eAllGraphics);
@@ -132,6 +140,7 @@ void Application::draw() {
 }
 
 void Application::init() {
+    init_imgui();
     init_scene_resources();
     init_descriptors();
     init_opaque_pipeline();
@@ -139,7 +148,159 @@ void Application::init() {
 
 void Application::update() const {
     sceneManager->update_nodes(glm::mat4(1.0f), testScene);
-    sceneManager->update_light_buffer();
+}
+
+void Application::handle_dir_lights_imgui() {
+    auto numDirLights = sceneManager->get_num_dirlights();
+    auto dirLights = sceneManager->get_dir_lights();
+    ImGui::TextColored(ImVec4(1, 1, 0, 1), "Directional Lights");
+    ImGui::BeginChild("Scrolling");
+    ImGui::InputInt("Selected directional light", &directionalLightIndex);
+    if (directionalLightIndex >= numDirLights - 1)
+        directionalLightIndex = numDirLights - 1;
+
+    auto* selectedLight = &dirLights[directionalLightIndex];
+    ImGui::Text("Directional Light Position");
+    if (ImGui::InputFloat("Directional Light X", &selectedLight->direction.x))
+        dirLightsDirty = true;
+    if (ImGui::InputFloat("Directional Light Y", &selectedLight->direction.y))
+        dirLightsDirty = true;
+    if (ImGui::InputFloat("Directional Light Z", &selectedLight->direction.z))
+        dirLightsDirty = true;
+    ImGui::Text("Directional Light Color");
+    if (ImGui::ColorEdit3("Directional Light Colour", reinterpret_cast<float*>(&selectedLight->colour)))
+        dirLightsDirty = true;
+    if (dirLightsDirty) {
+        sceneManager->update_light_buffers();
+        dirLightsDirty = false;
+    }
+
+    ImGui::EndChild();
+}
+
+void Application::handle_point_lights_imgui() {
+    ImGui::TextColored(ImVec4(1, 1, 0, 1), "Point Lights");
+    ImGui::BeginChild("Scrolling");
+    ImGui::InputInt("Selected Point light", &pointLightIndex);
+
+    auto numPointLights = sceneManager->pointLights.size();
+    if (pointLightIndex >= numPointLights - 1)
+        pointLightIndex = numPointLights - 1;
+
+    std::vector<vulkan::GPUPointLight>& pointLights = sceneManager->pointLights;
+    vulkan::GPUPointLight* selectedLight = &pointLights[pointLightIndex];
+    ImGui::Text("Point Light Position");
+    if (ImGui::InputFloat("Point Light X", &selectedLight->position.x))
+        pointLightsDirty = true;
+    if (ImGui::InputFloat("Point Light Y", &selectedLight->position.y))
+        pointLightsDirty = true;
+    if (ImGui::InputFloat("Point Light Z", &selectedLight->position.z))
+        pointLightsDirty = true;
+    ImGui::Text("Point Light Color");
+    if (ImGui::ColorEdit3("Point Light Colour", reinterpret_cast<float*>(&selectedLight->colour)))
+        pointLightsDirty = true;
+    ImGui::Text("Point Light Intensity");
+    if (ImGui::DragFloat("Point Light Intensity", &selectedLight->intensity, 0.01f, 0.0f, 1.0f))
+        pointLightsDirty = true;
+    ImGui::Text("Point Light Quadratic");
+    if (ImGui::DragFloat("Point Light Quadratic", &selectedLight->quadratic, 0.01f, 0.0f, 1.0f))
+        pointLightsDirty = true;
+    if (pointLightsDirty) {
+        sceneManager->update_light_buffers();
+        pointLightsDirty = false;
+    }
+    ImGui::EndChild();
+
+}
+
+void Application::handle_spot_lights_imgui() {
+    auto numSpotLights = sceneManager->get_num_spotlights();
+    auto spotLights = sceneManager->get_spot_lights();
+    ImGui::TextColored(ImVec4(1, 1, 0, 1), "Spot Lights");
+    ImGui::BeginChild("Scrolling");
+    ImGui::InputInt("Selected Spot light", &spotLightIndex);
+    if (spotLightIndex >= numSpotLights - 1)
+        spotLightIndex = numSpotLights - 1;
+
+    auto* selectedLight = &spotLights[spotLightIndex];
+    if (selectedLight != nullptr) {
+        ImGui::Text("Spot Light Position");
+        if (ImGui::InputFloat("Spot Light i", &selectedLight->position.x))
+            spotLightsDirty = true;
+        if (ImGui::InputFloat("Spot Light j", &selectedLight->position.y))
+            spotLightsDirty = true;
+        if (ImGui::InputFloat("Spot Light k", &selectedLight->position.z))
+            spotLightsDirty = true;
+        ImGui::Text("Spot Light Direction");
+        if (ImGui::InputFloat("Spot Light X", &selectedLight->direction.x))
+            spotLightsDirty = true;
+        if (ImGui::InputFloat("Spot Light Y", &selectedLight->direction.y))
+            spotLightsDirty = true;
+        if (ImGui::InputFloat("Spot Light Z", &selectedLight->direction.z))
+            spotLightsDirty = true;
+        ImGui::Text("Color");
+        if (ImGui::ColorEdit3("Spot Light Colour", reinterpret_cast<float*>(&selectedLight->colour)))
+            pointLightsDirty = true;
+        ImGui::Text("Spot Light Intensity");
+        if (ImGui::DragFloat("Spot Light Intensity", &selectedLight->intensity, 0.01f, 0.0f, 1.0f))
+            pointLightsDirty = true;
+        ImGui::Text("Spot Light Quadratic");
+        if (ImGui::DragFloat("Spot Light Quadratic", &selectedLight->quadratic, 0.01f, 0.0f, 1.0f))
+            pointLightsDirty = true;
+        ImGui::Text("Spot Light Inner Angle");
+        if (ImGui::DragFloat("Spot Light Inner Angle", &selectedLight->innerAngle, 0.01f, 0.0f, 360.0f))
+            pointLightsDirty = true;
+        ImGui::Text("Spot Light Outer Angle");
+        if (ImGui::DragFloat("Spot Light Outer Angle", &selectedLight->outerAngle, 0.01f, 0.0f, 360.0f))
+            pointLightsDirty = true;
+        if (pointLightsDirty) {
+            sceneManager->update_light_buffers();
+            pointLightsDirty = false;
+        }
+    }
+
+    ImGui::EndChild();
+}
+
+void Application::draw_imgui(
+    const vulkan::GraphicsContext& graphicsContext,
+    const vk::Image& swapchainImage,
+    const vk::ImageView& swapchainImageView,
+    vk::Extent2D& swapchainExtent) {
+    ImGui_ImplVulkan_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    ImGui::Begin("WCGL Test Renderer Settings");
+
+    ImGui::Text("Light Settings");
+
+    handle_dir_lights_imgui();
+    handle_point_lights_imgui();
+    handle_spot_lights_imgui();
+
+    ImGui::End();
+
+    ImGui::Render();
+
+    VkRenderingAttachmentInfo ImGUIDrawImage {.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO, .pNext = nullptr};
+    ImGUIDrawImage.imageView = swapchainImageView;
+    ImGUIDrawImage.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    ImGUIDrawImage.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+    ImGUIDrawImage.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+
+    VkRenderingInfo renderInfo {.sType = VK_STRUCTURE_TYPE_RENDERING_INFO, .pNext = nullptr};
+    vk::Rect2D renderArea{};
+    renderArea.extent.height = swapchainExtent.height;
+    renderArea.extent.width = swapchainExtent.width;
+    renderInfo.renderArea = renderArea;
+    renderInfo.pColorAttachments = &ImGUIDrawImage;
+    renderInfo.colorAttachmentCount = 1;
+    renderInfo.layerCount = 1;
+    renderInfo.viewMask = 0;
+    vkCmdBeginRendering(graphicsContext._commandBuffer, &renderInfo);
+    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), graphicsContext._commandBuffer);
+    vkCmdEndRendering(graphicsContext._commandBuffer);
 }
 
 void Application::init_descriptors() {
@@ -219,6 +380,87 @@ void Application::init_transparent_pipeline() {
 
     device.get_handle().destroyShaderModule(vertexShader.module);
     device.get_handle().destroyShaderModule(fragShader.module);
+}
+
+void Application::init_raytracing_pipeline() {
+
+    vulkan::Shader raygenShader;
+    vulkan::Shader rayClosestHitShader;
+    vulkan::Shader rayMissShader;
+
+
+    const std::vector<vk::PipelineShaderStageCreateInfo> stageInfos {
+        {{}, vk::ShaderStageFlagBits::eRaygenKHR, raygenShader.module, "main"},
+        {{}, vk::ShaderStageFlagBits::eClosestHitKHR, rayClosestHitShader.module, "main"},
+        {{}, vk::ShaderStageFlagBits::eMissKHR, rayMissShader.module, "main"}
+    };
+
+    vk::RayTracingPipelineCreateInfoKHR raytracingPipelineCI;
+    raytracingPipelineCI.pStages = stageInfos.data();
+    raytracingPipelineCI.stageCount = static_cast<uint32_t>(stageInfos.size());
+    //raytracingPipelineCI.pGroups = nullptr;
+}
+
+void Application::init_imgui() const {
+    vk::DescriptorPoolSize poolSizes[] = {
+            { vk::DescriptorType::eSampler, 1000 },
+        { vk::DescriptorType::eCombinedImageSampler, 1000 },
+        { vk::DescriptorType::eSampledImage, 1000 },
+        { vk::DescriptorType::eStorageImage, 1000 },
+        { vk::DescriptorType::eUniformTexelBuffer, 1000 },
+        { vk::DescriptorType::eStorageTexelBuffer, 1000 },
+        { vk::DescriptorType::eUniformBuffer, 1000 },
+        { vk::DescriptorType::eStorageBuffer, 1000 },
+        { vk::DescriptorType::eUniformBufferDynamic, 1000 },
+        { vk::DescriptorType::eStorageBufferDynamic, 1000 },
+        { vk::DescriptorType::eInputAttachment, 1000 }
+        };
+
+        vk::DescriptorPoolCreateInfo poolCI;
+        poolCI.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+        poolCI.maxSets = 1000;
+        poolCI.poolSizeCount = static_cast<u32>(std::size(poolSizes));
+        poolCI.pPoolSizes = poolSizes;
+
+        vk::DescriptorPool imguiPool;
+        vk_check(
+            device.get_handle().createDescriptorPool(&poolCI, nullptr, &imguiPool),
+            "Failed to create descriptor pool"
+        );
+
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO(); (void)io;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+
+        ImGui::StyleColorsDark();
+
+        ImGui_ImplGlfw_InitForVulkan(device.get_window(), true);
+        ImGui_ImplVulkan_InitInfo initInfo = {};
+        initInfo.Instance = device.get_instance();
+        initInfo.PhysicalDevice = device.get_gpu();
+        initInfo.Device = device.get_handle();
+        initInfo.Queue = device.get_graphics_queue();
+        initInfo.DescriptorPool = imguiPool;
+        initInfo.MinImageCount = 3;
+        initInfo.ImageCount = 3;
+        initInfo.UseDynamicRendering = true;
+
+        initInfo.PipelineRenderingCreateInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
+        initInfo.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
+        constexpr VkFormat colorAttachFormat = VK_FORMAT_B8G8R8A8_SRGB;
+        initInfo.PipelineRenderingCreateInfo.pColorAttachmentFormats = &colorAttachFormat;
+        initInfo.PipelineRenderingCreateInfo.depthAttachmentFormat = VK_FORMAT_D32_SFLOAT;
+        initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+        ImGui_ImplVulkan_Init(&initInfo);
+
+        ImGui_ImplVulkan_CreateFontsTexture();
+
+        device.deviceDeletionQueue.push_lambda([&] {
+            ImGui_ImplVulkan_Shutdown();
+            device.get_handle().destroyDescriptorPool(imguiPool);
+        });
 }
 
 void Application::init_scene_resources() {

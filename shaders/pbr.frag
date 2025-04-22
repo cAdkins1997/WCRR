@@ -42,7 +42,7 @@ vec3 fresnelSchlick(float normalHalfwayIncidence, vec3 F0) {
 
 void main() {
     MaterialBuffer mb = PushConstants.materialBuffer;
-    LightBuffer lb = PushConstants.lightBuffer;
+    PointLightBuffer lb = PushConstants.pointLightBuffer;
     Material material = mb.materials[PushConstants.materialIndex];
     vec4 baseColourTextureColour = texture(Textures[material.baseColorTexture], inUV);
     vec3 albedo = baseColourTextureColour.rgb;
@@ -60,14 +60,15 @@ void main() {
     F0 = mix(F0, albedo, metalness);
 
     vec3 Lo = vec3(0.0f);
-    for (uint i = 0; i < PushConstants.numLights; i++) {
-        Light currentLight = lb.lights[i];
-        vec3 lightDirection = normalize(currentLight.direction - inFragPosition);
+
+    for (uint i = 0; i < PushConstants.numPointLights; i++) {
+        PointLight currentLight = lb.lights[i];
+        vec3 lightDirection = normalize(currentLight.position - inFragPosition);
         vec3 halfway = normalize(view + lightDirection);
 
-        float distance = length(currentLight.direction - inFragPosition);
+        float distance = length(currentLight.position - inFragPosition);
         float attenuation = currentLight.intensity / ((distance * distance) + 0.0001f);
-        vec3 radiance = currentLight.colour * attenuation;
+        vec3 radiance = currentLight.color * attenuation;
 
         float NDF = dTrowbridgeReitzGGX(normal, halfway, roughness);
         float G = GSmith(normal, view, lightDirection, roughness);
@@ -75,17 +76,17 @@ void main() {
 
         vec3 kSpecular = F;
         vec3 kDiffuse = vec3(1.0f) - kSpecular;
+        kDiffuse *= 1.0f - metalness;
 
         float normalLightIncidence = max(dot(normal, lightDirection), 0.0f);
         vec3 numerator = NDF * G * F;
         float denominator = 4.0f * max(dot(normal, view), 0.0f) * normalLightIncidence + 0.0001f;
         vec3 specular = numerator / denominator;
 
-
         Lo += ((kDiffuse * albedo / PI + specular) * radiance * normalLightIncidence);
     }
 
-    vec3 ambient = vec3(0.00007f) * albedo;
+    vec3 ambient = vec3(0.0007f) * albedo;
     vec3 color = ambient + Lo;
 
     color = color / (color + vec3(1.0f));

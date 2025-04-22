@@ -1,6 +1,5 @@
 #include "device.h"
 
-
 namespace vulkan {
 
     void frame_buffer_resize_callback(GLFWwindow *window, i32 width, i32 height) {
@@ -10,7 +9,6 @@ namespace vulkan {
 
     Device::Device(std::string_view appName, const u32 _width, const u32 _height)
     : width(_width), height(_height) {
-
         init_window();
         init_instance();
         init_debug_messenger();
@@ -28,12 +26,13 @@ namespace vulkan {
     Device::~Device() {
         handle.waitIdle();
         for (auto & frame : frames) {
-            auto& currentFrame = frame;
+            const auto& currentFrame = frame;
             handle.destroyCommandPool(currentFrame.commandPool, nullptr);
             handle.destroyFence(currentFrame.renderFence, nullptr);
             handle.destroySemaphore(currentFrame.renderSemaphore, nullptr);
             handle.destroySemaphore(currentFrame.swapchainSemaphore, nullptr);
 
+            frame.deletionQueue.flush();
             frame.deletionQueue.flush();
         }
 
@@ -465,6 +464,10 @@ namespace vulkan {
         vkCreateImageView(handle, &imageViewCI, nullptr, &depthImage.view);
     }
 
+    void Device::init_imgui() {
+
+    }
+
     void Device::init_instance() {
         vk::ApplicationInfo appinfo;
         appinfo.pApplicationName = applicationName.data();
@@ -555,7 +558,7 @@ namespace vulkan {
         QueueFamilyIndices indices = find_queue_families(gpu);
 
         std::vector<vk::DeviceQueueCreateInfo> queueCIs;
-        std::set<u32> uniqueQueueFamilies = {indices.graphicsFamily.value(), indices.presentFamily.value()};
+        std::set uniqueQueueFamilies = {indices.graphicsFamily.value(), indices.presentFamily.value()};
 
         f32 queuePriority = 1.0f;
         for (u32 queueFamily : uniqueQueueFamilies) {
@@ -593,10 +596,6 @@ namespace vulkan {
         descIndexingFeatures.descriptorBindingUniformBufferUpdateAfterBind = true;
         descIndexingFeatures.descriptorBindingVariableDescriptorCount = true;
         dynamicRenderingFeatures.pNext = &descIndexingFeatures;
-
-        vk::PhysicalDeviceRobustness2FeaturesEXT robustnessFeaturesEXT;
-        robustnessFeaturesEXT.robustBufferAccess2 = true;
-        descIndexingFeatures.pNext = &robustnessFeaturesEXT;
 
         /*vk::PhysicalDeviceDescriptorBufferFeaturesEXT descBufferFeatures;
         descBufferFeatures.descriptorBuffer = true;
@@ -682,6 +681,8 @@ namespace vulkan {
 
         swapchainFormat = surfaceFormat.format;
         swapchainExtent = extent;
+
+        init_image_views();
     }
 
     void Device::init_image_views() {

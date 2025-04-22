@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 3.30.5)
 project(TESTWCGL)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -30,21 +30,51 @@ add_executable(${PROJECT_NAME}
         source/pipelines/descriptors.h
         source/device/debug.h
         source/device/debug.cpp
+        source/common.h
 )
 
 if (WIN32)
+    #set(IMGUI_PATH "include/imgui-1.91.9b")
+    #file(GLOB IMGUI_SOURCES ${IMGUI_PATH}/*.cpp)
+    #("ImGui" STATIC ${IMGUI_SOURCES})
+    #target_include_directories("ImGui" PUBLIC ${IMGUI_PATH})
+
     find_package(Vulkan REQUIRED)
     find_package(d3d12-memory-allocator CONFIG REQUIRED HINTS "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/d3d12-memory-allocator_x64-windows")
-    find_package(VulkanMemoryAllocator HINTS "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/vulkan-memory-allocator_x64-windows")
-    find_package(unofficial-vulkan-memory-allocator-hpp HINTS "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/vulkan-memory-allocator-hpp_x64-windows")
-    find_package(unofficial-spirv-reflect CONFIG REQUIRED HINTS "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/spirv-reflect_x64-mingw-dynamic")
     find_package(EABase CONFIG REQUIRED HINTS "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/eabase_x64-mingw-dynamic")
     find_package(EASTL CONFIG REQUIRED HINTS "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/eastl_x64-mingw-dynamic")
     find_package(zstd CONFIG REQUIRED HINTS "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/zstd_x64-windows")
     find_package(Ktx CONFIG REQUIRED HINTS  "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/ktx_x64-windows")
+    find_package(VulkanMemoryAllocator CONFIG REQUIRED HINTS "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/vulkan-memory-allocator_x64-windows")
+    find_package(glfw3 CONFIG REQUIRED HINTS "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/glfw3_x64-windows")
+    #find_package(imgui CONFIG REQUIRED HINTS "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/imgui_x64-windows")
 
-    add_subdirectory(include/glfw-3.4)
-    add_subdirectory(include/fastgltf-0.8.0)
+    #add_subdirectory(include/vma)
+    add_subdirectory(include/fastgltf)
+    #add_subdirectory(include/imgui)
+
+    set(IMGUI_PATH ${CMAKE_CURRENT_LIST_DIR}/include/imgui)
+    file(GLOB IMGUI_GLOB
+            ${IMGUI_PATH}/imgui.h
+            ${IMGUI_PATH}/imgui.cpp
+            ${IMGUI_PATH}/imconfig.h
+            ${IMGUI_PATH}/imgui_demo.cpp
+            ${IMGUI_PATH}/imgui_draw.cpp
+            ${IMGUI_PATH}/imgui_internal.h
+            ${IMGUI_PATH}/imstb_rectpack.h
+            ${IMGUI_PATH}/imstb_textedit.h
+            ${IMGUI_PATH}/imstb_truetype.h
+            ${IMGUI_PATH}/imgui_tables.cpp
+            ${IMGUI_PATH}/imgui_widgets.cpp
+
+            ${IMGUI_PATH}/backends/imgui_impl_glfw.h
+            ${IMGUI_PATH}/backends/imgui_impl_glfw.cpp
+            ${IMGUI_PATH}/imgui_impl_vulkan.h
+            ${IMGUI_PATH}/imgui_impl_vulkan.cpp)
+
+    add_library("imgui" STATIC ${IMGUI_GLOB})
+    target_include_directories("imgui" PUBLIC ${IMGUI_PATH})
+    target_link_libraries("imgui" PRIVATE glfw Vulkan::Vulkan)
 
     set(EASTL_LIBRARY debug ${z}/build/Debug/EASTL.lib optimized ${EASTL_ROOT_DIR}/build/Release/EASTL.lib)
 
@@ -56,11 +86,10 @@ if (WIN32)
             ${PROJECT_NAME}
             Vulkan::Vulkan
             glfw
+            imgui
             GPUOpen::VulkanMemoryAllocator
             unofficial::D3D12MemoryAllocator
-            unofficial::VulkanMemoryAllocator-Hpp::VulkanMemoryAllocator-Hpp
             fastgltf::fastgltf
-            unofficial::spirv-reflect
             KTX::ktx
             EABase
             EASTL
@@ -72,8 +101,8 @@ elseif (UNIX AND NOT APPLE)
     find_package(zstd CONFIG REQUIRED)
     find_package(Ktx CONFIG REQUIRED)
 
-    add_subdirectory(include/glfw-3.4)
-    add_subdirectory(include/fastgltf-0.8.0)
+    add_subdirectory(include/glfw)
+    add_subdirectory(include/fastgltf)
 
     set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
     set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
