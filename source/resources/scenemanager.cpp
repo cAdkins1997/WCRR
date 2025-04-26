@@ -41,7 +41,7 @@ namespace vulkan {
                 pc.materialIndex = material;
                 pc.numLights = numLights;
 
-                graphicsContext.set_push_constants(&pc, sizeof(pc), vk::ShaderStageFlagBits::eAll);
+                graphicsContext.set_push_constants(&pc, sizeof(pc), vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
                 graphicsContext.draw(surface.indexCount, surface.initialIndex);
             }
         }

@@ -43,8 +43,8 @@ if (WIN32)
     find_package(zstd CONFIG REQUIRED HINTS "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/zstd_x64-windows")
     find_package(Ktx CONFIG REQUIRED HINTS  "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/ktx_x64-windows")
 
-    add_subdirectory(include/glfw-3.4)
-    add_subdirectory(include/fastgltf-0.8.0)
+    add_subdirectory(include/glfw)
+    add_subdirectory(include/fastgltf)
 
     set(EASTL_LIBRARY debug ${z}/build/Debug/EASTL.lib optimized ${EASTL_ROOT_DIR}/build/Release/EASTL.lib)
 
