@@ -85,7 +85,7 @@ void main() {
         Lo += ((kDiffuse * albedo / PI + specular) * radiance * normalLightIncidence);
     }
 
-    vec3 ambient = vec3(0.00007f) * albedo;
+    vec3 ambient = 0.000001f * albedo;
     vec3 color = ambient + Lo;
 
     color = color / (color + vec3(1.0f));

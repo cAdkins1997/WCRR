@@ -41,21 +41,23 @@ namespace vulkan {
     }
 
     void Camera::process_mouse_movement(f32 xoffset, f32 yoffset, bool constrainPitch)  {
-        xoffset *= movementSpeed;
-        yoffset *= movementSpeed;
+        if (enableMouseLook) {
+            xoffset *= movementSpeed;
+            yoffset *= movementSpeed;
 
-        yaw += xoffset;
-        pitch -= yoffset;
+            yaw += xoffset;
+            pitch -= yoffset;
 
-        if (constrainPitch)
-        {
-            if (pitch > 89.0f)
-                pitch = 89.0f;
-            if (pitch < -89.0f)
-                pitch = -89.0f;
+            if (constrainPitch)
+            {
+                if (pitch > 89.0f)
+                    pitch = 89.0f;
+                if (pitch < -89.0f)
+                    pitch = -89.0f;
+            }
+
+            update_camera_vectors();
         }
-
-        update_camera_vectors();
     }
 
     void Camera::process_mouse_scroll(f32 yoffset) {

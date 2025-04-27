@@ -143,6 +143,9 @@ namespace vulkan {
         void init_draw_images();
         void init_depth_images();
 
+    public:
+        void init_imgui() const;
+
     private:
         std::vector<const char*> get_required_extensions();
         bool gpu_is_suitable(vk::PhysicalDevice gpu);
@@ -169,6 +172,7 @@ namespace vulkan {
         vk::CommandPool immediateCommandPool;
         vk::CommandBuffer immediateCommandBuffer;
         std::vector<vk::Image> swapchainImages{};
+        std::vector<vk::ImageView> swapchainImageViews;
 
     private:
         u32 width{}, height{};
@@ -178,7 +182,6 @@ namespace vulkan {
         vk::SwapchainKHR swapchain{};
         vk::Format swapchainFormat{};
         vk::Extent2D swapchainExtent;
-        std::vector<vk::ImageView> swapchainImageViews;
         u32 swapchainImageIndex = 0;
 
         Image drawImage;

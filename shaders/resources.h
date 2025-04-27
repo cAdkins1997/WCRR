@@ -23,10 +23,6 @@ struct Material {
     uint emissiveTexture;
 };
 
-const uint Directional = 0x00000001u;
-const uint Point = 0x00000002u;
-const uint Spot = 0x00000004u;
-
 struct Light {
     vec3 direction;
     vec3 colour;
@@ -34,7 +30,6 @@ struct Light {
     float range;
     float innerAngle;
     float outerAngle;
-    uint type;
 };
 
 layout(buffer_reference, std430) readonly buffer VertexBuffer {

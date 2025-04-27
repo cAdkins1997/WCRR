@@ -4,6 +4,10 @@
 #include "pipelines/descriptors.h"
 #include "pipelines/pipelineBuilder.h"
 
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_vulkan.h>
+
 void mouse_callback(GLFWwindow *window, double xposIn, double yposIn) {
     auto xpos = static_cast<float>(xposIn);
     auto ypos = static_cast<float>(yposIn);
@@ -28,7 +32,7 @@ void process_scroll(GLFWwindow *window, double xoffset, double yoffset) {
     camera.process_mouse_scroll(static_cast<float>(yoffset));
 }
 
-void process_input(GLFWwindow *window, f32 deltaTime) {
+void process_input(GLFWwindow *window, f32 deltaTime, bool& mouseLook) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
 
@@ -44,6 +48,17 @@ void process_input(GLFWwindow *window, f32 deltaTime) {
         camera.process_keyboard(vulkan::UP, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS)
         camera.process_keyboard(vulkan::DOWN, deltaTime);
+
+    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) {
+        if (mouseLook) {
+            mouseLook = false;
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_CAPTURED);
+        }
+        else {
+            mouseLook = true;
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        }
+    }
 }
 
 Application::Application(vulkan::Device& _device) : device(_device) {
@@ -86,10 +101,11 @@ void Application::draw() {
 
     const u32 index = device.get_swapchain_image_index();
     const vk::Image& currentSwapchainImage = device.swapchainImages[index];
+    vk::ImageView& currentSwapchainImageView = device.swapchainImageViews[index];
 
     vk::CommandBuffer& commandBuffer = currentFrame.commandBuffer;
 
-    process_input(device.get_window(), deltaTime);
+    process_input(device.get_window(), deltaTime, camera.enableMouseLook);
 
     SceneData sceneData{};
     sceneData.view = camera.get_view_matrix();
@@ -122,8 +138,11 @@ void Application::draw() {
 
     graphicsContext.image_barrier(drawImage.handle, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eTransferSrcOptimal);
     graphicsContext.image_barrier(currentSwapchainImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+
     graphicsContext.copy_image(drawImage.handle, currentSwapchainImage, drawImage.extent, device.get_swapchain_extent());
-    graphicsContext.image_barrier(currentSwapchainImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::ePresentSrcKHR);
+    graphicsContext.image_barrier(currentSwapchainImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eColorAttachmentOptimal);
+    draw_imgui(graphicsContext, currentSwapchainImageView, extent);
+    graphicsContext.image_barrier(currentSwapchainImage, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR);
     graphicsContext.end();
 
     device.submit_graphics_work(graphicsContext, vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::PipelineStageFlagBits2::eAllGraphics);
@@ -131,13 +150,82 @@ void Application::draw() {
     device.present();
 }
 
+void Application::init_imgui() {
+    device.init_imgui();
+    imguiVariables.lights = sceneManager->get_lights();
+    imguiVariables.lightNames = sceneManager->get_light_names().data();
+    i32 numLights = sceneManager->get_num_lights();
+}
+
+void Application::draw_imgui(const vulkan::GraphicsContext& graphicsContext, const vk::ImageView& imageView, const vk::Extent2D& extent) {
+    ImGui_ImplVulkan_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+    ImGui::Begin("Scene Settings");
+
+    imgui_light_info(graphicsContext);
+
+    ImGui::End();
+
+    ImGui::Render();
+
+    VkRenderingAttachmentInfo ImGUIDrawImage {.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO, .pNext = nullptr};
+    ImGUIDrawImage.imageView = imageView;
+    ImGUIDrawImage.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    ImGUIDrawImage.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+    ImGUIDrawImage.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+
+    VkRenderingInfo renderInfo {.sType = VK_STRUCTURE_TYPE_RENDERING_INFO, .pNext = nullptr};
+    vk::Rect2D renderArea{};
+    renderArea.extent.height = extent.height;
+    renderArea.extent.width = extent.width;
+    renderInfo.renderArea = renderArea;
+    renderInfo.pColorAttachments = &ImGUIDrawImage;
+    renderInfo.colorAttachmentCount = 1;
+    renderInfo.layerCount = 1;
+    renderInfo.viewMask = 0;
+    vkCmdBeginRendering(graphicsContext._commandBuffer, &renderInfo);
+    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), graphicsContext._commandBuffer);
+    vkCmdEndRendering(graphicsContext._commandBuffer);
+}
+
+void Application::imgui_light_info(const vulkan::GraphicsContext& graphicsContext) {
+    ImGui::BeginChild("Light Settings");
+    ImGui::Text("Light Settings");
+
+    auto label = "Lights";
+    ImGui::Combo(label, &imguiVariables.selectedLight, imguiVariables.lightNames, imguiVariables.numLights);
+    vulkan::Light* currentLight = &imguiVariables.lights[imguiVariables.selectedLight];
+
+    if (ImGui::InputFloat3("Position", reinterpret_cast<float*>(&currentLight->position))) {
+        imguiVariables.lightsDirty = true;
+    }
+
+    if (ImGui::ColorPicker3("Colour", reinterpret_cast<float*>(&currentLight->colour), ImGuiColorEditFlags_DisplayRGB | ImGuiColorEditFlags_Float)) {
+        imguiVariables.lightsDirty = true;
+    }
+
+    if (ImGui::DragFloat("Intensity", &currentLight->intensity, 0.001f, 0.0f, 1.0f)) {
+        imguiVariables.lightsDirty = true;
+    }
+
+
+    if (imguiVariables.lightsDirty) {
+        sceneManager->update_light_buffer();
+        imguiVariables.lightsDirty = false;
+    }
+
+    ImGui::EndChild();
+}
+
 void Application::init() {
     init_scene_resources();
     init_descriptors();
     init_opaque_pipeline();
+    init_imgui();
 }
 
-void Application::update() const {
+void Application::update() {
     sceneManager->update_nodes(glm::mat4(1.0f), testScene);
     sceneManager->update_light_buffer();
 }

@@ -46,6 +46,29 @@ if (WIN32)
     add_subdirectory(include/glfw)
     add_subdirectory(include/fastgltf)
 
+    set(IMGUI_PATH ${CMAKE_CURRENT_LIST_DIR}/include/imgui)
+    file(GLOB IMGUI_GLOB
+            ${IMGUI_PATH}/imgui.h
+            ${IMGUI_PATH}/imgui.cpp
+            ${IMGUI_PATH}/imconfig.h
+            ${IMGUI_PATH}/imgui_demo.cpp
+            ${IMGUI_PATH}/imgui_draw.cpp
+            ${IMGUI_PATH}/imgui_internal.h
+            ${IMGUI_PATH}/imstb_rectpack.h
+            ${IMGUI_PATH}/imstb_textedit.h
+            ${IMGUI_PATH}/imstb_truetype.h
+            ${IMGUI_PATH}/imgui_tables.cpp
+            ${IMGUI_PATH}/imgui_widgets.cpp
+
+            ${IMGUI_PATH}/backends/imgui_impl_glfw.h
+            ${IMGUI_PATH}/backends/imgui_impl_glfw.cpp
+            ${IMGUI_PATH}/imgui_impl_vulkan.h
+            ${IMGUI_PATH}/imgui_impl_vulkan.cpp)
+
+    add_library("imgui" STATIC ${IMGUI_GLOB})
+    target_include_directories("imgui" PUBLIC ${IMGUI_PATH})
+    target_link_libraries("imgui" PRIVATE glfw Vulkan::Vulkan)
+
     set(EASTL_LIBRARY debug ${z}/build/Debug/EASTL.lib optimized ${EASTL_ROOT_DIR}/build/Release/EASTL.lib)
 
     set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
@@ -61,6 +84,7 @@ if (WIN32)
             unofficial::VulkanMemoryAllocator-Hpp::VulkanMemoryAllocator-Hpp
             fastgltf::fastgltf
             unofficial::spirv-reflect
+            imgui
             KTX::ktx
             EABase
             EASTL

@@ -76,13 +76,6 @@ namespace vulkan {
 
         const auto handle = static_cast<NodeHandle>(newNode.magicNumber << 16 | nodeCount);
 
-        if (gltfNode.lightIndex.has_value()) {
-            auto& light = lights[gltfNode.lightIndex.value()];
-            light.node = handle;
-            const u16 metaData = light.magicNumber;
-            newNode.light = static_cast<NodeHandle>(metaData << 16 | gltfNode.lightIndex.value());
-        }
-
         if (gltfNode.meshIndex.has_value()) {
             const u16 metaData = get_metadata_at_index(gltfNode.meshIndex.value());
             newNode.mesh = static_cast<MeshHandle>(metaData << 16 | gltfNode.meshIndex.value());
@@ -108,6 +101,7 @@ namespace vulkan {
 
         for (const auto& gltfSampler : asset.samplers) {
             auto sampler = create_sampler(gltfSampler);
+            newScene.samplers.push_back(sampler);
             newScene.samplers.push_back(sampler);
         }
 
@@ -197,22 +191,14 @@ namespace vulkan {
 
     LightHandle SceneManager::create_light(const fastgltf::Light& gltfLight) {
         Light newLight{};
-        newLight.magicNumber = currentLight;
-        newLight.colour = glm::vec3(gltfLight.color.x(), gltfLight.color.y(), gltfLight.color.z());
+
+        lightNames.append(std::to_string(lights.size()) + '\0');
+
+        newLight.colour = {gltfLight.color.x(), gltfLight.color.y(), gltfLight.color.z()};
         newLight.intensity = gltfLight.intensity;
-        if (newLight.intensity <= 0.0f) newLight.intensity = 0.01f;
 
         if (gltfLight.range.has_value()) {
             newLight.range = gltfLight.range.value();
-        }
-        if (gltfLight.type == fastgltf::LightType::Directional) {
-            newLight.type = Directional;
-        }
-        else if (gltfLight.type == fastgltf::LightType::Point) {
-            newLight.type = Point;
-        }
-        else if (gltfLight.type == fastgltf::LightType::Spot) {
-            newLight.type = Spot;
         }
         if (gltfLight.innerConeAngle.has_value()) {
             newLight.innerAngle = gltfLight.innerConeAngle.value();
@@ -221,29 +207,9 @@ namespace vulkan {
             newLight.outerAngle = gltfLight.outerConeAngle.value();
         }
 
-        newLight.name = gltfLight.name;
         lights.push_back(newLight);
 
-        const auto handle = static_cast<LightHandle>(newLight.magicNumber << 16 | nodeCount);
-        lightCount++;
-        currentLight++;
-
-        return handle;
-    }
-
-    LightHandle SceneManager::create_point_light(glm::vec3 direction, glm::vec3 colour, f32 intensity, f32 range) {
-        Light newLight;
-        newLight.direction = direction;
-        newLight.magicNumber = currentLight;
-        newLight.colour = colour;
-        newLight.intensity = intensity;
-        newLight.range = range;
-        newLight.type = Point;
-        newLight.name = "Manual Point Light #" + std::to_string(currentLight);
-
-        lights.push_back(newLight);
-
-        const auto handle = static_cast<LightHandle>(newLight.magicNumber << 16 | nodeCount);
+        const auto handle = static_cast<LightHandle>(currentLight << 16 | lightCount);
         lightCount++;
         currentLight++;
 
@@ -253,14 +219,14 @@ namespace vulkan {
     void SceneManager::build_light_buffer(const u64 size) {
         if (size > 0) {
             lightBuffer = device.create_buffer(
-                sizeof(GPULight) * size,
+                sizeof(Light) * size,
                 vk::BufferUsageFlagBits::eStorageBuffer |
                 vk::BufferUsageFlagBits::eShaderDeviceAddress |
                 vk::BufferUsageFlagBits::eTransferDst,
                 VMA_MEMORY_USAGE_CPU_TO_GPU
                 );
 
-            lightBufferSize = size * sizeof(GPULight);
+            lightBufferSize = size * sizeof(Light);
             vk::BufferDeviceAddressInfo bdaInfo(lightBuffer.handle);
             lightBufferAddress = device.get_handle().getBufferAddress(bdaInfo);
         }
@@ -268,14 +234,13 @@ namespace vulkan {
 
     void SceneManager::update_light_buffer() {
         if (lightBufferSize > 0) {
-            auto* lightData = static_cast<GPULight*>(lightBuffer.get_mapped_data());
+            auto* lightData = static_cast<Light*>(lightBuffer.get_mapped_data());
             for (u32 i = 0; i < lights.size(); i++) {
-                GPULight gpuLight;
-                gpuLight.direction = lights[i].direction;
+                Light gpuLight;
+                gpuLight.position = lights[i].position;
                 gpuLight.colour = lights[i].colour;
                 gpuLight.intensity = lights[i].intensity;
                 gpuLight.range = lights[i].range;
-                gpuLight.type = lights[i].type;
                 gpuLight.innerAngle = lights[i].innerAngle;
                 gpuLight.outerAngle = lights[i].outerAngle;
                 lightData[i] = gpuLight;
@@ -973,7 +938,6 @@ namespace vulkan {
         const u32 index = get_handle_index(handle);
 
         assert(index <= scenes.size() && "Handle out of bounds");
-        assert(lights[index].magicNumber == metaData && "Handle metadata does not match an existing light");
     }
 
     void SceneManager::assert_handle(MaterialHandle handle) const {

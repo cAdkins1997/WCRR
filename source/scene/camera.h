@@ -42,6 +42,7 @@ namespace vulkan {
         f32 movementSpeed;
         f32 mouseSensitivity;
         f32 zoom;
+        bool enableMouseLook = false;
 
         explicit Camera(
             glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f),

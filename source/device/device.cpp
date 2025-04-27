@@ -1,5 +1,8 @@
 #include "device.h"
 
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_vulkan.h>
 
 namespace vulkan {
 
@@ -18,6 +21,7 @@ namespace vulkan {
         select_gpu();
         init_device();
         init_swapchain();
+        init_image_views();
         init_allocator();
         init_commands();
         init_sync_objects();
@@ -463,6 +467,62 @@ namespace vulkan {
         imageViewCI.subresourceRange = subresourceRange;
 
         vkCreateImageView(handle, &imageViewCI, nullptr, &depthImage.view);
+    }
+
+    void Device::init_imgui() const {
+    const vk::DescriptorPoolSize poolSizes[] = {
+            { vk::DescriptorType::eSampler, 1000 },
+        { vk::DescriptorType::eCombinedImageSampler, 1000 },
+        { vk::DescriptorType::eSampledImage, 1000 },
+        { vk::DescriptorType::eStorageImage, 1000 },
+        { vk::DescriptorType::eUniformTexelBuffer, 1000 },
+        { vk::DescriptorType::eStorageTexelBuffer, 1000 },
+        { vk::DescriptorType::eUniformBuffer, 1000 },
+        { vk::DescriptorType::eStorageBuffer, 1000 },
+        { vk::DescriptorType::eUniformBufferDynamic, 1000 },
+        { vk::DescriptorType::eStorageBufferDynamic, 1000 },
+        { vk::DescriptorType::eInputAttachment, 1000 }
+        };
+
+        vk::DescriptorPoolCreateInfo poolCI;
+        poolCI.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+        poolCI.maxSets = 1000;
+        poolCI.poolSizeCount = static_cast<u32>(std::size(poolSizes));
+        poolCI.pPoolSizes = poolSizes;
+
+        vk::DescriptorPool imguiPool;
+        vk_check(
+            handle.createDescriptorPool(&poolCI, nullptr, &imguiPool),
+            "Failed to create descriptor pool"
+        );
+
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+
+        ImGui::StyleColorsDark();
+
+        ImGui_ImplGlfw_InitForVulkan(window, true);
+        ImGui_ImplVulkan_InitInfo initInfo = {};
+        initInfo.Instance = instance;
+        initInfo.PhysicalDevice = gpu;
+        initInfo.Device = handle;
+        initInfo.Queue = graphicsQueue;
+        initInfo.DescriptorPool = imguiPool;
+        initInfo.MinImageCount = 3;
+        initInfo.ImageCount = 3;
+        initInfo.UseDynamicRendering = true;
+
+        initInfo.PipelineRenderingCreateInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
+        initInfo.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
+        constexpr VkFormat colorAttachFormat = VK_FORMAT_B8G8R8A8_SRGB;
+        initInfo.PipelineRenderingCreateInfo.pColorAttachmentFormats = &colorAttachFormat;
+        initInfo.PipelineRenderingCreateInfo.depthAttachmentFormat = VK_FORMAT_D32_SFLOAT;
+        initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+        ImGui_ImplVulkan_Init(&initInfo);
+        ImGui_ImplVulkan_CreateFontsTexture();
     }
 
     void Device::init_instance() {

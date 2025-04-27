@@ -102,27 +102,16 @@ namespace vulkan {
         Directional, Point, Spot
     };
 
-    struct Light {
-        std::string name;
-        glm::vec3 direction{};
-        glm::vec3 colour;
-        f32 intensity;
-        f32 range;
-        f32 innerAngle;
-        f32 outerAngle;
-        NodeHandle node;
-        u16 magicNumber;
-        LightType type;
-    };
+    struct Colour { f32 r, g, b; };
+    struct Pos3 { f32 x, y, z; };
 
-    struct GPULight {
-        glm::vec3 direction{};
-        glm::vec3 colour;
-        f32 intensity;
-        f32 range;
-        f32 innerAngle;
-        f32 outerAngle;
-        LightType type;
+    struct Light {
+        alignas(16) glm::vec3 position{};
+        alignas(16) glm::vec3 colour{};
+        f32 intensity{};
+        f32 range{};
+        f32 innerAngle{};
+        f32 outerAngle{};
     };
 
     struct PushConstants {
@@ -174,7 +163,6 @@ namespace vulkan {
         NodeHandle create_node(fastgltf::Node gltfNode);
         SceneHandle create_scene(fastgltf::Asset& asset);
         LightHandle create_light(const fastgltf::Light& gltfLight);
-        LightHandle create_point_light(glm::vec3 direction, glm::vec3 colour, f32 intensity, f32 range);
 
         void build_light_buffer(u64 size);
         void update_light_buffer();
@@ -190,6 +178,8 @@ namespace vulkan {
         Buffer& get_light_buffer() { return lightBuffer; }
         u32 get_light_buffer_size() const { return lightBufferSize; }
         vk::DeviceAddress get_light_buffer_address() const { return lightBufferAddress; }
+        Light* get_lights() { return lights.data(); }
+        std::string& get_light_names() { return lightNames; }
 
         MeshHandle create_mesh(const fastgltf::Mesh& gltfMesh, const VertexBuffer& vertexBuffer);
         std::vector<MeshHandle> create_meshes(const fastgltf::Asset &asset);
@@ -248,6 +238,7 @@ namespace vulkan {
         std::vector<Light> lights;
         Buffer lightBuffer;
         vk::DeviceAddress lightBufferAddress{};
+        std::string lightNames;
         u32 lightBufferSize = 0;
         u32 lightCount = 0;
         u16 currentLight = 0;
