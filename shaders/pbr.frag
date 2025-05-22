@@ -51,8 +51,6 @@ void main() {
     float metalness = mrTexture.b;
     float roughness = mrTexture.g;
 
-    vec4 aoTexture = texture(Textures[material.occlusionTexture], inUV);
-
     vec3 normal = normalize(inNormal);
     vec3 view = normalize(sceneData.cameraPosition - inFragPosition);
 
@@ -62,30 +60,32 @@ void main() {
     vec3 Lo = vec3(0.0f);
     for (uint i = 0; i < PushConstants.numLights; i++) {
         Light currentLight = lb.lights[i];
-        vec3 lightDirection = normalize(currentLight.direction - inFragPosition);
-        vec3 halfway = normalize(view + lightDirection);
+        if (currentLight.intensity != 0.0f) {
+            vec3 lightDirection = normalize(currentLight.direction - inFragPosition);
+            vec3 halfway = normalize(view + lightDirection);
 
-        float distance = length(currentLight.direction - inFragPosition);
-        float attenuation = currentLight.intensity / ((distance * distance) + 0.0001f);
-        vec3 radiance = currentLight.colour * attenuation;
+            float distance = length(currentLight.direction - inFragPosition);
 
-        float NDF = dTrowbridgeReitzGGX(normal, halfway, roughness);
-        float G = GSmith(normal, view, lightDirection, roughness);
-        vec3 F = fresnelSchlick(max(dot(halfway, view), 0.0f), F0);
+            float attenuation = currentLight.intensity / ((distance * distance) + 0.000001f);
+            vec3 radiance = currentLight.colour * attenuation;
 
-        vec3 kSpecular = F;
-        vec3 kDiffuse = vec3(1.0f) - kSpecular;
+            float NDF = dTrowbridgeReitzGGX(normal, halfway, roughness);
+            float G = GSmith(normal, view, lightDirection, roughness);
+            vec3 F = fresnelSchlick(max(dot(halfway, view), 0.0f), F0);
 
-        float normalLightIncidence = max(dot(normal, lightDirection), 0.0f);
-        vec3 numerator = NDF * G * F;
-        float denominator = 4.0f * max(dot(normal, view), 0.0f) * normalLightIncidence + 0.0001f;
-        vec3 specular = numerator / denominator;
+            vec3 kSpecular = F;
+            vec3 kDiffuse = vec3(1.0f) - kSpecular;
 
+            float normalLightIncidence = max(dot(normal, lightDirection), 0.0f);
+            vec3 numerator = NDF * G * F;
+            float denominator = 4.0f * max(dot(normal, view), 0.0f) * normalLightIncidence + 0.0001f;
+            vec3 specular = numerator / denominator;
 
-        Lo += ((kDiffuse * albedo / PI + specular) * radiance * normalLightIncidence);
+            Lo += ((kDiffuse * albedo / PI + specular) * radiance * normalLightIncidence);
+        }
     }
 
-    vec3 ambient = 0.000001f * albedo;
+    vec3 ambient = 0.0000001f * albedo;
     vec3 color = ambient + Lo;
 
     color = color / (color + vec3(1.0f));
