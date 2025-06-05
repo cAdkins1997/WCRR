@@ -14,35 +14,56 @@ namespace vulkan {
 
     SceneManager::SceneManager(Device& _device, UploadContext& _context) : device(_device), context(_context) {}
 
-    void SceneManager::draw_scene(const GraphicsContext &graphicsContext, SceneHandle handle) {
-        assert_handle(handle);
-        const u32 sceneIndex = get_handle_index(handle);
+    void SceneManager::draw_scene(const GraphicsContext &graphicsContext, SceneHandle handle, const glm::mat4& viewProjectionMatrix) {
 
         auto materialBuffer = get_material_buffer_address();
-        auto vertexBuffer = vertexBuffers[0];
+        pc.materialBuffer = materialBuffer;
+
+        auto& vertexBuffer = vertexBuffers[0];
+        pc.vertexBuffer = vertexBuffer.vertexBufferAddress;
+
+        auto scene = get_scene(handle);
+        pc.numLights = static_cast<u32>(scene.lights.size());
+        pc.lightBuffer = lightBufferAddress;
+
+        cpu_frustum_culling(scene, viewProjectionMatrix);
+
         graphicsContext.bind_index_buffer(vertexBuffer.indexBuffer);
 
-        auto& scene = scenes[sceneIndex];
-        for (const auto& nodeHandle : scene.opaqueNodes) {
-            assert_handle(nodeHandle);
-            const u32 index = get_handle_index(nodeHandle);
-            auto& node = nodes[index];
+        for (const auto&[surface, worldMatrix] : scene.renderables) {
+            pc.renderMatrix = worldMatrix;
+            pc.materialIndex = get_handle_index(surface.material);
+            graphicsContext.set_push_constants(&pc, sizeof(pc), vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
+            graphicsContext.draw(surface.indexCount, surface.initialIndex);
+            scene.renderables.clear();
+        }
+    }
+
+    void SceneManager::cpu_frustum_culling(Scene& scene, const glm::mat4& viewProjectionMatrix) {
+        const Frustum viewFrustum = compute_frustum(viewProjectionMatrix);
+
+        for (const auto& NodeHandle : scene.opaqueNodes) {
+            const auto& node = get_node(NodeHandle);
             auto& mesh = get_mesh(node.mesh);
+            
+            for (auto& surface : mesh.surfaces) {
+                AABB transformedAABB = recompute_aabb(surface.boundingVolume, node.worldMatrix);
+                const auto [min, max] = transformedAABB;
+                bool visible = true;
+                for (const auto& plane : viewFrustum) {
+                    int out = 0;
+                    out += dot(plane, glm::vec4(min.x, min.y, min.z, 1.0f)) < 0.0f ? 1.0f : 0.0f;
+                    out += dot(plane, glm::vec4(max.x, min.y, min.z, 1.0f)) < 0.0f ? 1.0f : 0.0f;
+                    out += dot(plane, glm::vec4(min.x, max.y, min.z, 1.0f)) < 0.0f ? 1.0f : 0.0f;
+                    out += dot(plane, glm::vec4(max.x, max.y, min.z, 1.0f)) < 0.0f ? 1.0f : 0.0f;
+                    out += dot(plane, glm::vec4(min.x, min.y, max.z, 1.0f)) < 0.0f ? 1.0f : 0.0f;
+                    out += dot(plane, glm::vec4(max.x, min.y, max.z, 1.0f)) < 0.0f ? 1.0f : 0.0f;
+                    out += dot(plane, glm::vec4(min.x, max.y, max.z, 1.0f)) < 0.0f ? 1.0f : 0.0f;
+                    out += dot(plane, glm::vec4(max.x, max.y, max.z, 1.0f)) < 0.0f ? 1.0f : 0.0f;
+                    if (out == 8) visible = false;
+                }
 
-            const u32 numLights = static_cast<u32>(scene.lights.size());
-
-            for (const auto& surface : mesh.surfaces) {
-                const auto material = get_handle_index(surface.material);
-
-                pc.renderMatrix = node.worldMatrix;
-                pc.vertexBuffer = vertexBuffer.vertexBufferAddress;
-                pc.materialBuffer = materialBuffer;
-                pc.lightBuffer = lightBufferAddress;
-                pc.materialIndex = material;
-                pc.numLights = numLights;
-
-                graphicsContext.set_push_constants(&pc, sizeof(pc), vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
-                graphicsContext.draw(surface.indexCount, surface.initialIndex);
+                if (visible) scene.renderables.push_back({surface, node.worldMatrix});
             }
         }
     }
@@ -181,6 +202,8 @@ namespace vulkan {
             if (type == opaque) newScene.opaqueNodes.push_back(nodeHandle);
             if (type == transparent) newScene.transparentNodes.push_back(nodeHandle);
         }
+
+        newScene.renderables.reserve(newScene.nodes.size());
 
         const auto handle = static_cast<SceneHandle>(newScene.magicNumber << 16 | sceneCount);
         scenes.push_back(std::move(newScene));
@@ -363,6 +386,17 @@ namespace vulkan {
                     });
                 }
 
+                glm::vec3 min = vertices[initialVertex].position;
+                glm::vec3 max = vertices[initialVertex].position;
+                for (int i = initialVertex; i < vertices.size(); i++) {
+                    min = glm::min(min, vertices[i].position);
+                    max = glm::max(max, vertices[i].position);
+                }
+
+                newSurface.boundingVolume = {min, max};
+
+
+
                 newMesh.surfaces.push_back(newSurface);
             }
 
@@ -378,6 +412,31 @@ namespace vulkan {
 
         vertexBuffers.emplace_back(std::move(vertexBuffer));
         currentVertexBuffer++;
+
+        return vertexBuffer.meshes;
+    }
+
+    std::vector<MeshHandle> SceneManager::create_aabb_meshes(const std::vector<NodeHandle>& nodes) {
+        vertices.clear();
+
+        VertexBuffer vertexBuffer{};
+        for (const auto nodeHandle : nodes) {
+            auto node = get_node(nodeHandle);
+            vertexBuffer.meshes.push_back(node.mesh);
+
+            auto mesh = get_mesh(node.mesh);
+            for (const auto& surface : mesh.surfaces) {
+                auto AABBVertices = get_aabb_vertices(surface.boundingVolume);
+                for (const auto& vertex : AABBVertices) {
+                    Vertex newVertex{};
+                    newVertex.position = vertex;
+                    vertices.push_back(newVertex);
+                }
+            }
+        }
+
+        upload_vertex_buffer(vertexBuffer);
+        vertexBuffer.magicNumber = currentVertexBuffer;
 
         return vertexBuffer.meshes;
     }
@@ -978,6 +1037,79 @@ namespace vulkan {
 
         assert(index < samplers.size());
         assert(samplers[index].magicNumber == metaData);
+    }
+
+    Frustum compute_frustum(const glm::mat4& viewProjection) {
+        const glm::mat4 transpose = glm::transpose(viewProjection);
+
+        const Plane leftPlane = transpose[3] + transpose[0];
+        const Plane rightPlane = transpose[3] - transpose[0];
+        const Plane bottomPlane = transpose[3] + transpose[1];
+        const Plane topPlane = transpose[3] - transpose[1];
+        const Plane nearPlane = transpose[3] + transpose[2];
+
+        return {leftPlane, rightPlane, bottomPlane, topPlane, nearPlane};
+    }
+
+    AABB recompute_aabb(const AABB &oldAABB, const glm::mat4 &transform) {
+        const glm::vec3& min = oldAABB.min;
+        const glm::vec3& max = oldAABB.max;
+
+        const glm::vec3 corners[8] = {
+            glm::vec3(transform * glm::vec4(min.x, min.y, min.z, 1.0f)),
+            glm::vec3(transform * glm::vec4(min.x, max.y, min.z, 1.0f)),
+            glm::vec3(transform * glm::vec4(min.x, min.y, max.z, 1.0f)),
+            glm::vec3(transform * glm::vec4(min.x, max.y, max.z, 1.0f)),
+            glm::vec3(transform * glm::vec4(max.x, min.y, min.z, 1.0f)),
+            glm::vec3(transform * glm::vec4(max.x, max.y, min.z, 1.0f)),
+            glm::vec3(transform * glm::vec4(max.x, min.y, max.z, 1.0f)),
+            glm::vec3(transform * glm::vec4(max.x, max.y, max.z, 1.0f))
+        };
+
+
+        AABB result {corners[0], corners[0]};
+
+        for (const auto& corner : corners) {
+            result.min = glm::min(result.min, corner);
+            result.max = glm::max(result.max, corner);
+        }
+
+        return result;
+    }
+
+    std::vector<glm::vec3> get_aabb_vertices(const AABB& aabb) {
+        const glm::vec3& min = aabb.min;
+        const glm::vec3& max = aabb.max;
+
+        const glm::vec3 corners[8] = {
+            glm::vec3(min.x, min.y, min.z),
+            glm::vec3(min.x, max.y, min.z),
+            glm::vec3(min.x, min.y, max.z),
+            glm::vec3(min.x, max.y, max.z),
+            glm::vec3(max.x, min.y, min.z),
+            glm::vec3(max.x, max.y, min.z),
+            glm::vec3(max.x, min.y, max.z),
+            glm::vec3(max.x, max.y, max.z)
+        };
+
+        std::vector vertices = {
+            corners[0], corners[1],
+            corners[2], corners[3],
+            corners[4], corners[5],
+            corners[6], corners[7],
+
+            corners[0], corners[2],
+            corners[1], corners[3],
+            corners[4], corners[6],
+            corners[5], corners[7],
+
+            corners[0], corners[4],
+            corners[1], corners[5],
+            corners[2], corners[6],
+            corners[3], corners[7]
+        };
+
+        return vertices;
     }
 
     void SceneManager::release_gpu_resources() {

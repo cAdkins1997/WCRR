@@ -86,7 +86,7 @@ namespace vulkan {
         return newBuffer;
     }
 
-    Image Device::create_image(vk::Extent3D size, VkFormat format, VkImageUsageFlags usage, u32 mipLevels, bool mipmapped) {
+    Image Device::create_image(vk::Extent3D size, VkFormat format, VkImageUsageFlags usage, u32 mipLevels, bool mipmapped) const {
         Image newImage{};
         newImage.format = format;
         newImage.extent = size;
@@ -131,7 +131,7 @@ namespace vulkan {
         return newImage;
     }
 
-    Sampler Device::create_sampler(const vk::Filter minFilter, const vk::Filter magFilter, const vk::SamplerMipmapMode mipmapMode) {
+    Sampler Device::create_sampler(const vk::Filter minFilter, const vk::Filter magFilter, const vk::SamplerMipmapMode mipmapMode) const {
 
         vk::SamplerCreateInfo samplerCI;
         samplerCI.minFilter = minFilter;
@@ -147,7 +147,7 @@ namespace vulkan {
         return Sampler{magFilter, minFilter, newSampler};
     }
 
-    Shader Device::create_shader(std::string_view filePath) {
+    Shader Device::create_shader(std::string_view filePath) const {
         std::ifstream file(filePath.data(), std::ios::ate | std::ios::binary);
 
         if (!file.is_open()) {

@@ -132,7 +132,7 @@ void Application::draw() {
     graphicsContext.set_viewport(extent, 0.0f, 1.0f);
     graphicsContext.set_scissor(extent);
 
-    sceneManager->draw_scene(graphicsContext, testScene);
+    sceneManager->draw_scene(graphicsContext, testScene, sceneData.projection * sceneData.view);
 
     graphicsContext._commandBuffer.endRendering();
 

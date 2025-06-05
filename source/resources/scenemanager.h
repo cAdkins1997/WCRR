@@ -39,7 +39,21 @@ namespace vulkan {
         u16 magicNumber;
     };
 
+    typedef glm::vec4 Plane;
+    typedef std::array<Plane, 5> Frustum;
+
+    struct AABB {
+        glm::vec3 min{};
+        glm::vec3 max{};
+    };
+
+    struct BoundingSphere {
+        glm::vec4 center{};
+        f32 radius{};
+    };
+
     struct Surface {
+        AABB boundingVolume;
         u32 initialIndex{};
         u32 indexCount{};
         MaterialHandle material{};
@@ -136,6 +150,11 @@ namespace vulkan {
         void refresh(const glm::mat4& parentMatrix, SceneManager& sceneManager);
     };
 
+    struct Renderable {
+        Surface surface;
+        glm::mat4 worldMatrix{};
+    };
+
     struct Scene {
         std::vector<NodeHandle> nodes;
         std::vector<NodeHandle> renderableNodes;
@@ -147,6 +166,7 @@ namespace vulkan {
         std::vector<SamplerHandle> samplers;
         std::vector<TextureHandle> textures;
         std::vector<LightHandle> lights;
+        std::vector<Renderable> renderables;
         u16 magicNumber{};
     };
 
@@ -156,7 +176,9 @@ namespace vulkan {
 
         void release_gpu_resources();
 
-        void draw_scene(const GraphicsContext &graphicsContext, SceneHandle handle);
+        void draw_scene(const GraphicsContext& graphicsContext, SceneHandle handle, const glm::mat4& viewProjectionMatrix);
+        void draw_aabb(const GraphicsContext& graphics_context, SceneHandle handle);
+        void cpu_frustum_culling(Scene& scene, const glm::mat4& viewProjectionMatrix);
 
         void update_nodes(const glm::mat4& rootMatrix, SceneHandle handle);
 
@@ -176,13 +198,14 @@ namespace vulkan {
         [[nodiscard]] u32 get_num_lights() const { return lights.size(); }
 
         Buffer& get_light_buffer() { return lightBuffer; }
-        u32 get_light_buffer_size() const { return lightBufferSize; }
-        vk::DeviceAddress get_light_buffer_address() const { return lightBufferAddress; }
+        [[nodiscard]] u32 get_light_buffer_size() const { return lightBufferSize; }
+        [[nodiscard]] vk::DeviceAddress get_light_buffer_address() const { return lightBufferAddress; }
         Light* get_lights() { return lights.data(); }
         std::string& get_light_names() { return lightNames; }
 
         MeshHandle create_mesh(const fastgltf::Mesh& gltfMesh, const VertexBuffer& vertexBuffer);
         std::vector<MeshHandle> create_meshes(const fastgltf::Asset &asset);
+        std::vector<MeshHandle> create_aabb_meshes(const std::vector<NodeHandle>& nodes);
 
         Mesh& get_mesh(MeshHandle handle);
         VertexBuffer& get_vertex_buffer(u32 index);
@@ -278,4 +301,8 @@ namespace vulkan {
         void assert_handle(TextureHandle handle) const;
         void assert_handle(SamplerHandle handle) const;
     };
+
+    Frustum compute_frustum(const glm::mat4& viewProjection);
+    AABB recompute_aabb(const AABB& oldAABB, const glm::mat4& transform);
+    std::vector<glm::vec3> get_aabb_vertices(const AABB& aabb);
 }

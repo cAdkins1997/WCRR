@@ -34,7 +34,7 @@ namespace vulkan {
                 for (u32 i = 0; i < pCallbackData->objectCount; i++) {
                     message << std::string("\t\t") << "Object " << i << "\n";
                     message << std::string("\t\t\t") << "objectType   = "
-                            << vk::to_string(callBackData->pObjects[i].objectType) << "\n";
+                            << to_string(callBackData->pObjects[i].objectType) << "\n";
                     message << std::string("\t\t\t") << "objectHandle = " << pCallbackData->pObjects[i].objectHandle
                             << "\n";
 

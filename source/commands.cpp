@@ -269,7 +269,7 @@ namespace vulkan {
         allocationCI.usage = VMA_MEMORY_USAGE_AUTO;
         Buffer newBuffer{};
 
-        vmaCreateBuffer(_allocator, (VkBufferCreateInfo*)&bufferInfo, &allocationCI, (VkBuffer*)&newBuffer.handle, &newBuffer.allocation, &newBuffer.info);
+        vmaCreateBuffer(_allocator, reinterpret_cast<VkBufferCreateInfo*>(&bufferInfo), &allocationCI, (VkBuffer*)&newBuffer.handle, &newBuffer.allocation, &newBuffer.info);
 
         return newBuffer;
     }
