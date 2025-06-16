@@ -19,8 +19,8 @@ namespace vulkan {
             VkAllocationCallbacks const *pAllocator);
 
     VKAPI_ATTR vk::Bool32 VKAPI_CALL debugMessageFunc(
-            VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-            VkDebugUtilsMessageTypeFlagsEXT messageTypes,
-            const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
+            vk::DebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+            vk::DebugUtilsMessageTypeFlagsEXT messageTypes,
+            const vk::DebugUtilsMessengerCallbackDataEXT *pCallbackData,
             void *);
 }

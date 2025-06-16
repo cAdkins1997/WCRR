@@ -10,7 +10,7 @@ namespace vulkan {
     class DescriptorBuilder {
 
     public:
-        explicit DescriptorBuilder(vulkan::Device &device);
+        explicit DescriptorBuilder(Device &device);
         void release_descriptor_resources();
 
         vk::DescriptorSet build(vk::DescriptorSetLayout &layout);
@@ -23,7 +23,7 @@ namespace vulkan {
         void update_set(const vk::DescriptorSet &set);
 
     private:
-        vulkan::Device &_device;
+        Device &_device;
 
         std::deque<vk::DescriptorBufferInfo> bufferInfos;
         std::deque<vk::DescriptorImageInfo> imageInfos;
@@ -35,8 +35,8 @@ namespace vulkan {
         static constexpr u32 textureCount = 65536;
 
         std::vector<vk::DescriptorPoolSize> poolSizes = {
-                {vk::DescriptorType::eStorageBuffer, uniformCount},
-                {vk::DescriptorType::eStorageImage,  textureCount},
+                {vk::DescriptorType::eUniformBuffer, uniformCount},
+                {vk::DescriptorType::eCombinedImageSampler,  textureCount},
         };
 
         vk::DescriptorPool pool;

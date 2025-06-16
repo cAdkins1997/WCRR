@@ -5,8 +5,8 @@
 #include "pipelines/pipelineBuilder.h"
 
 #include <imgui.h>
-#include <imgui_impl_glfw.h>
-#include <imgui_impl_vulkan.h>
+#include <backends/imgui_impl_glfw.h>
+#include <backends/imgui_impl_vulkan.h>
 
 void mouse_callback(GLFWwindow *window, double xposIn, double yposIn) {
     auto xpos = static_cast<float>(xposIn);
@@ -85,6 +85,9 @@ Application::~Application() {
 
 void Application::run() {
     while (!glfwWindowShouldClose(device.get_window())) {
+        if (device.resizeRequested == true) {
+            device.recreate_swapchain();
+        }
         glfwPollEvents();
         draw();
     }
@@ -99,9 +102,10 @@ void Application::draw() {
     device.wait_on_present();
     auto& currentFrame = device.get_current_frame();
 
-    const u32 index = device.get_swapchain_image_index();
-    const vk::Image& currentSwapchainImage = device.swapchainImages[index];
-    vk::ImageView& currentSwapchainImageView = device.swapchainImageViews[index];
+    const auto currentSwapchainResult = device.get_swapchain_image();
+    if (!currentSwapchainResult.has_value())
+        return;
+    auto [currentSwapchainImage, currentSwapchainImageView] = currentSwapchainResult.value();
 
     vk::CommandBuffer& commandBuffer = currentFrame.commandBuffer;
 
@@ -177,8 +181,7 @@ void Application::draw_imgui(const vulkan::GraphicsContext& graphicsContext, con
 
     VkRenderingInfo renderInfo {.sType = VK_STRUCTURE_TYPE_RENDERING_INFO, .pNext = nullptr};
     vk::Rect2D renderArea{};
-    renderArea.extent.height = extent.height;
-    renderArea.extent.width = extent.width;
+    renderArea.extent = drawImageExtent;
     renderInfo.renderArea = renderArea;
     renderInfo.pColorAttachments = &ImGUIDrawImage;
     renderInfo.colorAttachmentCount = 1;
@@ -326,7 +329,7 @@ void Application::init_scene_resources() {
         VMA_ALLOCATION_CREATE_MAPPED_BIT
         );
 
-    if (auto gltf = sceneManager->load_gltf("../assets/NewSponza_Main_glTF_003.gltf"); gltf.has_value()) {
+    if (auto gltf = sceneManager->load_gltf("../assets/scenes/sponza/NewSponza_Main_glTF_003.gltf"); gltf.has_value()) {
         testScene = sceneManager->create_scene(gltf.value());
         update();
     }

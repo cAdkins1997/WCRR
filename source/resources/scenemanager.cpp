@@ -703,7 +703,7 @@ namespace vulkan {
             std::visit(fastgltf::visitor {
             [&](auto& arg) {},
                 [&](fastgltf::sources::URI& path) {
-                    std::string prepend = "../assets/";
+                    std::string prepend = "../assets/scenes/sponza/";
                     prepend.append(path.uri.c_str());
 
                     ktxTexture* texture;

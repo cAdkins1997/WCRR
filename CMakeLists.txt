@@ -34,12 +34,7 @@ add_executable(${PROJECT_NAME}
 
 if (WIN32)
     find_package(Vulkan REQUIRED)
-    find_package(d3d12-memory-allocator CONFIG REQUIRED HINTS "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/d3d12-memory-allocator_x64-windows")
     find_package(VulkanMemoryAllocator HINTS "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/vulkan-memory-allocator_x64-windows")
-    find_package(unofficial-vulkan-memory-allocator-hpp HINTS "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/vulkan-memory-allocator-hpp_x64-windows")
-    find_package(unofficial-spirv-reflect CONFIG REQUIRED HINTS "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/spirv-reflect_x64-mingw-dynamic")
-    find_package(EABase CONFIG REQUIRED HINTS "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/eabase_x64-mingw-dynamic")
-    find_package(EASTL CONFIG REQUIRED HINTS "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/eastl_x64-mingw-dynamic")
     find_package(zstd CONFIG REQUIRED HINTS "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/zstd_x64-windows")
     find_package(Ktx CONFIG REQUIRED HINTS  "C:/Users/ulver/.vcpkg-clion/vcpkg/packages/ktx_x64-windows")
 
@@ -79,16 +74,25 @@ if (WIN32)
             ${PROJECT_NAME}
             Vulkan::Vulkan
             glfw
-            GPUOpen::VulkanMemoryAllocator
-            unofficial::D3D12MemoryAllocator
-            unofficial::VulkanMemoryAllocator-Hpp::VulkanMemoryAllocator-Hpp
             fastgltf::fastgltf
-            unofficial::spirv-reflect
             imgui
             KTX::ktx
-            EABase
-            EASTL
     )
+
+    set(SLANGC "$ENV{VULKAN_SDK}/Bin/slangc.exe")
+    file(GLOB_RECURSE SLANG_SOURCE_FILES "${PROJECT_SOURCE_DIR}/shaders/*.slang")
+    foreach(SLANG ${SLANG_SOURCE_FILES})
+        message(STATUS "BUILDING SHADER")
+        get_filename_component(FILE_NAME ${SLANG} NAME)
+        set(SPIRV "${PROJECT_SOURCE_DIR}/shaders/${FILE_NAME}.spv")
+        message(STATUS ${SLANG})
+        add_custom_command(
+                OUTPUT ${SPIRV}
+                COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_BINARY_DIR}/shaders/"
+                COMMAND ${SLANGC} ${SLANG} -target spirv -o ${SPIRV}
+                DEPENDS ${SLANG})
+        list(APPEND SPIRV_BINARY_FILES ${SPIRV})
+    endforeach(SLANG)
 
 elseif (UNIX AND NOT APPLE)
     find_package(Vulkan REQUIRED)
@@ -96,8 +100,8 @@ elseif (UNIX AND NOT APPLE)
     find_package(zstd CONFIG REQUIRED)
     find_package(Ktx CONFIG REQUIRED)
 
-    add_subdirectory(include/glfw-3.4)
-    add_subdirectory(include/fastgltf-0.8.0)
+    add_subdirectory(include/glfw)
+    add_subdirectory(include/fastgltf)
 
     set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
     set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)

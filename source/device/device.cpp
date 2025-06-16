@@ -52,11 +52,7 @@ namespace vulkan {
 
         deviceDeletionQueue.flush();
 
-        handle.destroySwapchainKHR(swapchain, nullptr);
-
-        for (auto& view : swapchainImageViews) {
-            handle.destroyImageView(view, nullptr);
-        }
+        destroy_swapchain();
 
         instance.destroySurfaceKHR(surface, nullptr);
         //handle.destroy();
@@ -290,24 +286,27 @@ namespace vulkan {
 
     void Device::present() {
         const vk::PresentInfoKHR presentInfo(1, &get_current_frame().renderSemaphore, 1, &swapchain, &swapchainImageIndex);
-        vk_check(
-            graphicsQueue.presentKHR(&presentInfo),
-            "Failed to present");
+        if (const auto result = graphicsQueue.presentKHR(&presentInfo); result == vk::Result::eErrorOutOfDateKHR) {
+            resizeRequested = true;
+            return;
+        }
         frameNumber++;
     }
 
-    vk::Image& Device::get_swapchain_image() {
-        return swapchainImages[get_swapchain_image_index()];
-    }
+    std::optional<SwapchainImage> Device::get_swapchain_image()
+    {
+        const auto result = handle.acquireNextImageKHR(swapchain, UINT64_MAX, get_current_frame().swapchainSemaphore, nullptr, &swapchainImageIndex);
+        if (result == vk::Result::eErrorOutOfDateKHR)
+        {
+            resizeRequested = true;
+            return {};
+        }
+        if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
+            throw std::runtime_error("Failed to acquire swapchain image!");
 
-    u32 Device::get_swapchain_image_index() {
-
-        vk_check(
-            handle.acquireNextImageKHR(swapchain, UINT32_MAX, get_current_frame().swapchainSemaphore, nullptr, &swapchainImageIndex),
-            "Failed to acquire next image"
-            );
-
-        return swapchainImageIndex;
+        const auto image = swapchainImages[swapchainImageIndex];
+        const auto view = swapchainImageViews[swapchainImageIndex];
+        return SwapchainImage {image, view};
     }
 
     void Device::init_commands() {
@@ -469,6 +468,21 @@ namespace vulkan {
         vkCreateImageView(handle, &imageViewCI, nullptr, &depthImage.view);
     }
 
+    void Device::recreate_swapchain()
+    {
+        handle.waitIdle();
+        destroy_swapchain();
+        init_swapchain();
+    }
+
+    void Device::destroy_swapchain() {
+        handle.destroySwapchainKHR(swapchain, nullptr);
+
+        for (auto& view : swapchainImageViews) {
+            handle.destroyImageView(view, nullptr);
+        }
+    }
+
     void Device::init_imgui() const {
     const vk::DescriptorPoolSize poolSizes[] = {
             { vk::DescriptorType::eSampler, 1000 },
@@ -525,6 +539,10 @@ namespace vulkan {
         ImGui_ImplVulkan_CreateFontsTexture();
     }
 
+    FrameData& Device::get_current_frame() {
+        return frames[frameNumber % MAX_FRAMES_IN_FLIGHT];
+    }
+
     void Device::init_instance() {
         vk::ApplicationInfo appinfo;
         appinfo.pApplicationName = applicationName.data();
@@ -573,7 +591,7 @@ namespace vulkan {
             glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
             glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
             glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-            glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+            glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
             window = glfwCreateWindow(width, height, applicationName.data(), nullptr, nullptr);
         }

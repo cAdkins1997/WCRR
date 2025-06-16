@@ -50,6 +50,12 @@ namespace vulkan {
         DeletionQueue deletionQueue;
     };
 
+    struct SwapchainImage
+    {
+        vk::Image swapchainImage;
+        vk::ImageView swapchainImageView;
+    };
+
 #ifdef NDEBUG
     constexpr bool enableValidationLayers = false;
 #else
@@ -114,19 +120,18 @@ namespace vulkan {
 
         Image& get_draw_image() { return drawImage; }
         Image& get_depth_image() { return depthImage; }
-        vk::Image& get_swapchain_image();
-        vk::Extent3D get_swapchain_extent() const { return {swapchainExtent.width, swapchainExtent.height, 1}; }
+        [[nodiscard]] vk::Extent3D get_swapchain_extent() const { return {swapchainExtent.width, swapchainExtent.height, 1}; }
         [[nodiscard]] GLFWwindow* get_window() const { return window; }
 
         [[nodiscard]] u32 get_width() const { return width; }
         [[nodiscard]] u32 get_height() const { return height; }
 
         [[nodiscard]] VmaAllocator &get_allocator() { return allocator; }
-        u32 get_swapchain_image_index();
+        std::optional<SwapchainImage> get_swapchain_image();
 
         DeletionQueue deviceDeletionQueue;
     public:
-        [[nodiscard]] FrameData& get_current_frame() { return frames[frameNumber % MAX_FRAMES_IN_FLIGHT]; }
+        [[nodiscard]] FrameData& get_current_frame();
 
     private:
         void init_instance();
@@ -142,6 +147,11 @@ namespace vulkan {
         void init_allocator();
         void init_draw_images();
         void init_depth_images();
+
+    public:
+        void recreate_swapchain();
+    private:
+        void destroy_swapchain();
 
     public:
         void init_imgui() const;
