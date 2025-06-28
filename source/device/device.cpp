@@ -61,10 +61,12 @@ namespace vulkan {
     }
 
     Buffer Device::create_buffer(
-        size_t allocationSize,
+        u64 allocationSize,
         vk::BufferUsageFlags usage,
         VmaMemoryUsage memoryUsage,
         VmaAllocationCreateFlags flags) {
+
+        usage |= vk::BufferUsageFlagBits::eShaderDeviceAddress;
 
         vk::BufferCreateInfo bufferInfo;
         bufferInfo.pNext = nullptr;
@@ -77,12 +79,15 @@ namespace vulkan {
 
         Buffer newBuffer{};
 
-        vmaCreateBuffer(allocator, reinterpret_cast<VkBufferCreateInfo*>(&bufferInfo), &vmaallocInfo, (VkBuffer*)&newBuffer.handle, &newBuffer.allocation, &newBuffer.info);
+        vmaCreateBuffer(allocator, reinterpret_cast<VkBufferCreateInfo*>(&bufferInfo), &vmaallocInfo, &newBuffer.handle, &newBuffer.allocation, &newBuffer.info);
+
+        vk::BufferDeviceAddressInfo bdaInfo(newBuffer.handle);
+        newBuffer.deviceAddress = handle.getBufferAddress(bdaInfo);
 
         return newBuffer;
     }
 
-    Image Device::create_image(vk::Extent3D size, VkFormat format, VkImageUsageFlags usage, u32 mipLevels, bool mipmapped) const {
+    Image Device::create_image(vk::Extent3D size, const VkFormat format, const VkImageUsageFlags usage, const u32 mipLevels, const bool mipmapped) const {
         Image newImage{};
         newImage.format = format;
         newImage.extent = size;
@@ -173,6 +178,11 @@ namespace vulkan {
         shader.path = filePath.data();
 
         return shader;
+    }
+
+    void Device::destroy_buffer(const Buffer& buffer) const
+    {
+        vmaDestroyBuffer(allocator, buffer.handle, buffer.allocation);
     }
 
     void Device::submit_graphics_work(
@@ -468,6 +478,24 @@ namespace vulkan {
         vkCreateImageView(handle, &imageViewCI, nullptr, &depthImage.view);
     }
 
+    void Device::init_draw_indirect_commands(const u64 size)
+    {
+        for (auto& frame : frames)
+        {
+            frame.drawIndirectCommandBuffer = create_buffer(
+                size * sizeof(vk::DrawIndexedIndirectCommand),
+                vk::BufferUsageFlagBits::eIndirectBuffer | vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst,
+                VMA_MEMORY_USAGE_CPU_TO_GPU
+                );
+
+            frame.surfaceDataBuffer = create_buffer(
+                size * sizeof(GPUSurface),
+                vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst,
+                VMA_MEMORY_USAGE_CPU_TO_GPU
+            );
+        }
+    }
+
     void Device::recreate_swapchain()
     {
         handle.waitIdle();
@@ -567,7 +595,7 @@ namespace vulkan {
             debugCI.messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
                                       vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
                                       vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation;
-            debugCI.pfnUserCallback = debugMessageFunc;
+            //debugCI.pfnUserCallback = debugMessageFunc;
         }
 
         vk_check(
@@ -647,34 +675,33 @@ namespace vulkan {
         vk::PhysicalDeviceFeatures2 deviceFeatures;
         deviceFeatures = gpu.getFeatures2();
 
-        vk::PhysicalDeviceBufferDeviceAddressFeatures bdaFeatures;
-        bdaFeatures.setBufferDeviceAddress(true);
-        deviceFeatures.pNext = &bdaFeatures;
+        vk::PhysicalDeviceVulkan11Features features11;
+        features11.shaderDrawParameters = true;
+        deviceFeatures.pNext = &features11;
 
-        vk::PhysicalDeviceSynchronization2Features sync2Features;
-        sync2Features.synchronization2 = true;
-        bdaFeatures.pNext = &sync2Features;
+        vk::PhysicalDeviceVulkan12Features features12;
+        features12.bufferDeviceAddress = true;
+        features12.runtimeDescriptorArray = true;
+        features12.descriptorBindingPartiallyBound = true;
+        features12.runtimeDescriptorArray = true;
+        features12.descriptorBindingSampledImageUpdateAfterBind = true;
+        features12.descriptorBindingStorageBufferUpdateAfterBind = true;
+        features12.descriptorBindingStorageImageUpdateAfterBind = true;
+        features12.descriptorBindingSampledImageUpdateAfterBind = true;
+        features12.descriptorBindingStorageBufferUpdateAfterBind = true;
+        features12.descriptorBindingUniformBufferUpdateAfterBind = true;
+        features12.descriptorBindingVariableDescriptorCount = true;
+        features12.scalarBlockLayout = true;
+        features11.pNext = &features12;
 
-        vk::PhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures;
-        dynamicRenderingFeatures.dynamicRendering = true;
-        sync2Features.pNext = &dynamicRenderingFeatures;
-
-        vk::PhysicalDeviceDescriptorIndexingFeatures descIndexingFeatures;
-        descIndexingFeatures.runtimeDescriptorArray = true;
-        descIndexingFeatures.descriptorBindingPartiallyBound = true;
-        descIndexingFeatures.runtimeDescriptorArray = true;
-        descIndexingFeatures.descriptorBindingSampledImageUpdateAfterBind = true;
-        descIndexingFeatures.descriptorBindingStorageBufferUpdateAfterBind = true;
-        descIndexingFeatures.descriptorBindingStorageImageUpdateAfterBind = true;
-        descIndexingFeatures.descriptorBindingSampledImageUpdateAfterBind = true;
-        descIndexingFeatures.descriptorBindingStorageBufferUpdateAfterBind = true;
-        descIndexingFeatures.descriptorBindingUniformBufferUpdateAfterBind = true;
-        descIndexingFeatures.descriptorBindingVariableDescriptorCount = true;
-        dynamicRenderingFeatures.pNext = &descIndexingFeatures;
+        vk::PhysicalDeviceVulkan13Features features13;
+        features13.dynamicRendering = true;
+        features13.synchronization2 = true;
+        features12.pNext = &features13;
 
         vk::PhysicalDeviceRobustness2FeaturesEXT robustnessFeaturesEXT;
         robustnessFeaturesEXT.robustBufferAccess2 = true;
-        descIndexingFeatures.pNext = &robustnessFeaturesEXT;
+        features13.pNext = &robustnessFeaturesEXT;
 
         /*vk::PhysicalDeviceDescriptorBufferFeaturesEXT descBufferFeatures;
         descBufferFeatures.descriptorBuffer = true;

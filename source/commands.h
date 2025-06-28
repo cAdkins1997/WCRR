@@ -17,6 +17,7 @@ namespace vulkan {
         void resource_barrier();
         void bind_pipeline(const Pipeline& pipeline);
         void dispatch(u32 groupCountX, u32 groupCountY, u32 groupCountZ) const;
+        void set_push_constants(const void *pPushConstants, u64 size, vk::ShaderStageFlags shaderStage) const;
 
         vk::CommandBuffer& _commandBuffer;
         Pipeline _pipeline;
@@ -85,6 +86,7 @@ namespace vulkan {
         void set_push_constants(const void *pPushConstants, u64 size, const vk::ShaderStageFlags shaderStage) const;
 
         void draw(u32 count, u32 startIndex) const;
+        void draw_indirect(const Buffer& buffer, u64 count) const;
 
         vk::CommandBuffer& _commandBuffer;
         Pipeline _pipeline;

@@ -1,0 +1,71 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#extension GL_ARB_shading_language_include : require
+#include "resources.h"
+
+AABB recompute_aabb(AABB oldAABB, mat4 viewProjectionMatrix) {
+    vec3 bvMin = oldAABB.bvMin;
+    vec3 bvMax = oldAABB.bvMin;
+
+    const vec3 corners[8] = {
+        vec3(viewProjectionMatrix * vec4(bvMin.x, bvMin.y, bvMin.z, 1.0f)),
+        vec3(viewProjectionMatrix * vec4(bvMin.x, bvMax.y, bvMin.z, 1.0f)),
+        vec3(viewProjectionMatrix * vec4(bvMin.x, bvMin.y, bvMax.z, 1.0f)),
+        vec3(viewProjectionMatrix * vec4(bvMin.x, bvMax.y, bvMax.z, 1.0f)),
+        vec3(viewProjectionMatrix * vec4(bvMax.x, bvMin.y, bvMin.z, 1.0f)),
+        vec3(viewProjectionMatrix * vec4(bvMax.x, bvMax.y, bvMin.z, 1.0f)),
+        vec3(viewProjectionMatrix * vec4(bvMax.x, bvMin.y, bvMax.z, 1.0f)),
+        vec3(viewProjectionMatrix * vec4(bvMax.x, bvMax.y, bvMax.z, 1.0f))
+    };
+
+    AABB result;
+    result.bvMin = corners[0];
+    result.bvMax = corners[0];
+
+    for (uint i = 0; i < 8; i++) {
+        result.bvMin = min(result.bvMin, corners[i]);
+        result.bvMax = max(result.bvMax, corners[i]);
+    }
+
+    return result;
+}
+
+uint check_plane(vec4 plane, vec4 point) {
+    if (dot(plane, point) < 0.0f) {
+        return 1;
+    }
+
+    return 0;
+}
+
+bool in_frustum(AABB transformedAABB) {
+    vec3 bvMin = transformedAABB.bvMin;
+    vec3 bvMax = transformedAABB.bvMax;
+
+    bool visible = true;
+
+    for (uint i = 0; i < 5; i++) {
+        uint count = 0;
+        count += check_plane(sceneData.frustum[i], vec4(bvMax.x, bvMin.y, bvMin.z, 1.0f));
+        count += check_plane(sceneData.frustum[i], vec4(bvMin.x, bvMax.y, bvMin.z, 1.0f));
+        count += check_plane(sceneData.frustum[i], vec4(bvMax.x, bvMax.y, bvMin.z, 1.0f));
+        count += check_plane(sceneData.frustum[i], vec4(bvMin.x, bvMin.y, bvMax.z, 1.0f));
+        count += check_plane(sceneData.frustum[i], vec4(bvMax.x, bvMin.y, bvMax.z, 1.0f));
+        count += check_plane(sceneData.frustum[i], vec4(bvMin.x, bvMax.y, bvMax.z, 1.0f));
+        count += check_plane(sceneData.frustum[i], vec4(bvMax.x, bvMax.y, bvMax.z, 1.0f));
+        if (count == 8) visible = false;
+    }
+
+    return visible;
+}
+
+void main() {
+    uint globalID = gl_GlobalInvocationID.x;
+    if (globalID < sceneData.drawCount) {
+        AABB bv = recompute_aabb(PushConstants.surfaceBuffer.surfaces[globalID].boundingVolume, sceneData.projection * sceneData.view);
+        bool visible = in_frustum(bv);
+        if (!visible) {
+            PushConstants.commandBuffer.commands[globalID].instanceCount = 0;
+        }
+    }
+}

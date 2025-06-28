@@ -14,29 +14,11 @@ namespace vulkan {
 
     SceneManager::SceneManager(Device& _device, UploadContext& _context) : device(_device), context(_context) {}
 
-    void SceneManager::draw_scene(const GraphicsContext &graphicsContext, SceneHandle handle, const glm::mat4& viewProjectionMatrix) {
-
-        auto materialBuffer = get_material_buffer_address();
-        pc.materialBuffer = materialBuffer;
-
-        auto& vertexBuffer = vertexBuffers[0];
-        pc.vertexBuffer = vertexBuffer.vertexBufferAddress;
-
-        auto scene = get_scene(handle);
-        pc.numLights = static_cast<u32>(scene.lights.size());
-        pc.lightBuffer = lightBufferAddress;
-
-        cpu_frustum_culling(scene, viewProjectionMatrix);
-
+    void SceneManager::draw_scene(const GraphicsContext &graphicsContext, const FrameData& frame) const
+    {
+        const auto& vertexBuffer = vertexBuffers[0];
         graphicsContext.bind_index_buffer(vertexBuffer.indexBuffer);
-
-        for (const auto&[surface, worldMatrix] : scene.renderables) {
-            pc.renderMatrix = worldMatrix;
-            pc.materialIndex = get_handle_index(surface.material);
-            graphicsContext.set_push_constants(&pc, sizeof(pc), vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
-            graphicsContext.draw(surface.indexCount, surface.initialIndex);
-            scene.renderables.clear();
-        }
+        graphicsContext.draw_indirect(frame.drawIndirectCommandBuffer, get_num_surfaces());
     }
 
     void SceneManager::cpu_frustum_culling(Scene& scene, const glm::mat4& viewProjectionMatrix) {
@@ -51,7 +33,7 @@ namespace vulkan {
                 const auto [min, max] = transformedAABB;
                 bool visible = true;
                 for (const auto& plane : viewFrustum) {
-                    int out = 0;
+                    i32 out = 0;
                     out += dot(plane, glm::vec4(min.x, min.y, min.z, 1.0f)) < 0.0f ? 1.0f : 0.0f;
                     out += dot(plane, glm::vec4(max.x, min.y, min.z, 1.0f)) < 0.0f ? 1.0f : 0.0f;
                     out += dot(plane, glm::vec4(min.x, max.y, min.z, 1.0f)) < 0.0f ? 1.0f : 0.0f;
@@ -244,14 +226,12 @@ namespace vulkan {
             lightBuffer = device.create_buffer(
                 sizeof(Light) * size,
                 vk::BufferUsageFlagBits::eStorageBuffer |
-                vk::BufferUsageFlagBits::eShaderDeviceAddress |
                 vk::BufferUsageFlagBits::eTransferDst,
                 VMA_MEMORY_USAGE_CPU_TO_GPU
                 );
 
             lightBufferSize = size * sizeof(Light);
-            vk::BufferDeviceAddressInfo bdaInfo(lightBuffer.handle);
-            lightBufferAddress = device.get_handle().getBufferAddress(bdaInfo);
+            lightBufferAddress = lightBuffer.deviceAddress;
         }
     }
 
@@ -388,7 +368,7 @@ namespace vulkan {
 
                 glm::vec3 min = vertices[initialVertex].position;
                 glm::vec3 max = vertices[initialVertex].position;
-                for (int i = initialVertex; i < vertices.size(); i++) {
+                for (u64 i = initialVertex; i < vertices.size(); i++) {
                     min = glm::min(min, vertices[i].position);
                     max = glm::max(max, vertices[i].position);
                 }
@@ -400,6 +380,7 @@ namespace vulkan {
                 newMesh.surfaces.push_back(newSurface);
             }
 
+            numSurfaces += newMesh.surfaces.size();
             const auto handle = static_cast<MeshHandle>(newMesh.magicNumber << 16 | meshes.size());
             meshes.push_back(newMesh);
             currentMesh++;
@@ -416,29 +397,57 @@ namespace vulkan {
         return vertexBuffer.meshes;
     }
 
-    std::vector<MeshHandle> SceneManager::create_aabb_meshes(const std::vector<NodeHandle>& nodes) {
-        vertices.clear();
+    void SceneManager::build_draw_indirect_buffers(Device& device, const UploadContext& context, const SceneHandle sceneHandle)
+    {
+        std::vector<vk::DrawIndexedIndirectCommand> indirectCommands;
+        std::vector<GPUSurface> sceneSurfaces;
 
-        VertexBuffer vertexBuffer{};
-        for (const auto nodeHandle : nodes) {
-            auto node = get_node(nodeHandle);
-            vertexBuffer.meshes.push_back(node.mesh);
+        u64 instanceCount = 0;
+        for (const auto scene = get_scene(sceneHandle); const auto& nodeHandle : scene.opaqueNodes)
+        {
+            const auto node = get_node(nodeHandle);
+            const auto renderMatrix = node.worldMatrix;
+            const auto mesh = get_mesh(node.mesh);
 
-            auto mesh = get_mesh(node.mesh);
-            for (const auto& surface : mesh.surfaces) {
-                auto AABBVertices = get_aabb_vertices(surface.boundingVolume);
-                for (const auto& vertex : AABBVertices) {
-                    Vertex newVertex{};
-                    newVertex.position = vertex;
-                    vertices.push_back(newVertex);
-                }
+            for (const auto& [boundingVolume, initialIndex, indexCount, material] : mesh.surfaces)
+            {
+                vk::DrawIndexedIndirectCommand command;
+                command.indexCount = indexCount;
+                command.firstIndex = initialIndex;
+                command.firstInstance = instanceCount;
+                command.instanceCount = 1;
+                instanceCount++;
+
+                GPUSurface gpuSurface;
+                gpuSurface.renderMatrix = renderMatrix;
+                gpuSurface.boundingVolume = boundingVolume;
+                gpuSurface.indexCount = indexCount;
+                gpuSurface.initialIndex = initialIndex;
+                gpuSurface.materialIndex = get_handle_index(material);
+
+                indirectCommands.push_back(command);
+                sceneSurfaces.push_back(gpuSurface);
             }
         }
 
-        upload_vertex_buffer(vertexBuffer);
-        vertexBuffer.magicNumber = currentVertexBuffer;
+        const auto frames = device.get_frames();
+        for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            auto& indirectBuffer = frames[i].drawIndirectCommandBuffer;
+            auto& surfaceBuffer = frames[i].surfaceDataBuffer;
 
-        return vertexBuffer.meshes;
+            const u64 indirectSize = sizeof(vk::DrawIndexedIndirectCommand) * indirectCommands.size();
+            const u64 surfaceSize = sizeof(GPUSurface) * sceneSurfaces.size();
+
+            auto indirectStaging = make_staging_buffer(indirectSize, device.get_allocator());
+            auto surfaceStaging = make_staging_buffer(surfaceSize, device.get_allocator());
+
+            memcpy(indirectStaging.get_mapped_data(), indirectCommands.data(), indirectSize);
+            memcpy(surfaceStaging.get_mapped_data(), sceneSurfaces.data(), surfaceSize);
+
+            context.copy_buffer(indirectStaging, indirectBuffer, 0, 0, indirectSize);
+            context.copy_buffer(surfaceStaging, surfaceBuffer, 0, 0, surfaceSize);
+        }
     }
 
     Mesh& SceneManager::get_mesh(MeshHandle handle) {

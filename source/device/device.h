@@ -42,6 +42,8 @@ namespace vulkan {
     };
 
     struct FrameData {
+        Buffer drawIndirectCommandBuffer;
+        Buffer surfaceDataBuffer;
         vk::CommandPool commandPool;
         vk::CommandBuffer commandBuffer;
         vk::Semaphore swapchainSemaphore;
@@ -99,13 +101,15 @@ namespace vulkan {
         [[nodiscard]] vk::Queue get_transferQueue() const { return transferQueue; }
 
         [[nodiscard]] Buffer create_buffer(
-            size_t allocationSize,
+            u64 allocationSize,
             vk::BufferUsageFlags usage,
             VmaMemoryUsage memoryUsage,
             VmaAllocationCreateFlags flags = VmaAllocationCreateFlagBits::VMA_ALLOCATION_CREATE_MAPPED_BIT);
         [[nodiscard]] Image create_image(vk::Extent3D size, VkFormat format, VkImageUsageFlags usage, u32 mipLevels, bool mipmapped) const;
         [[nodiscard]] Sampler create_sampler(vk::Filter minFilter, vk::Filter magFilter, vk::SamplerMipmapMode mipmapMode) const;
         [[nodiscard]] Shader create_shader(std::string_view filePath) const;
+
+        void destroy_buffer(const Buffer& buffer) const;
 
         void submit_graphics_work(const GraphicsContext& context, vk::PipelineStageFlagBits2 wait, vk::PipelineStageFlagBits2 signal);
         void submit_compute_work(const ComputeContext& context, vk::PipelineStageFlagBits2 wait, vk::PipelineStageFlagBits2 signal);
@@ -118,6 +122,7 @@ namespace vulkan {
         void wait_on_work();
         void present();
 
+        FrameData* get_frames() { return frames.data(); }
         Image& get_draw_image() { return drawImage; }
         Image& get_depth_image() { return depthImage; }
         [[nodiscard]] vk::Extent3D get_swapchain_extent() const { return {swapchainExtent.width, swapchainExtent.height, 1}; }
@@ -149,6 +154,9 @@ namespace vulkan {
         void init_depth_images();
 
     public:
+        void init_draw_indirect_commands(u64 size);
+
+    public:
         void recreate_swapchain();
     private:
         void destroy_swapchain();
@@ -167,7 +175,7 @@ namespace vulkan {
         vk::Extent2D choose_swap_extent(const vk::SurfaceCapabilitiesKHR& capabilities);
 
     private:
-        FrameData frames[MAX_FRAMES_IN_FLIGHT];
+        std::array<FrameData, MAX_FRAMES_IN_FLIGHT> frames;
         std::vector<const char*> validationLayers {"VK_LAYER_KHRONOS_validation"};
         std::string applicationName;
         vk::Instance instance;

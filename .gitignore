@@ -35,9 +35,9 @@
 # .idea/artifacts
 # .idea/compiler.xml
 # .idea/jarRepositories.xml
-# .idea/modules.xml
+# .idea/slang.xml
 # .idea/*.iml
-# .idea/modules
+# .idea/slang
 # *.iml
 # *.ipr
 

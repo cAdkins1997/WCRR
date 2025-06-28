@@ -11,12 +11,12 @@
 
 #include "glmdefines.h"
 
-#include "pipelines/descriptors.h"
-
 struct SceneData {
+    vulkan::Frustum frustum;
     glm::mat4 view;
     glm::mat4 projection;
     glm::vec3 cameraPosition;
+    u32 drawCount;
 };
 
 struct ImGUIVariables {
@@ -27,6 +27,16 @@ struct ImGUIVariables {
     bool lightsDirty = false;
 };
 
+struct PushConstants {
+    glm::mat4 renderMatrix;
+    vk::DeviceAddress vertexBuffer;
+    vk::DeviceAddress materialBuffer;
+    vk::DeviceAddress lightBuffer;
+    vk::DeviceAddress indirectBuffer;
+    vk::DeviceAddress surfaceBuffer;
+    u32 numLights;
+};
+
 inline auto camera = vulkan::Camera(glm::vec3(0.0f, 10.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f), -90.0f, 0.0f);;
 inline bool firstMouse = true;
 inline f32 lastX = 400, lastY = 300;
@@ -34,6 +44,15 @@ inline f32 lastX = 400, lastY = 300;
 void mouse_callback(GLFWwindow* window, f64 xposIn, f64 yposIn);
 void process_scroll(GLFWwindow* window, double xoffset, double yoffset);
 void process_input(GLFWwindow *window, f32 deltaTime, bool& mouseLook);
+
+inline vk::PushConstantRange build_push_constant_ranges(const vk::ShaderStageFlags stageFlags)
+{
+    vk::PushConstantRange pcRange;
+    pcRange.offset = 0;
+    pcRange.size = sizeof(PushConstants);
+    pcRange.stageFlags = stageFlags;
+    return pcRange;
+}
 
 class Application {
 public:
@@ -51,14 +70,18 @@ private:
     void init_descriptors();
     void init_opaque_pipeline();
     void init_transparent_pipeline();
+    void init_culling_pipeline();
     void init_scene_resources();
     void init_imgui();
+
+    PushConstants build_push_constants(const vulkan::FrameData& frame);
 
     f32 deltaTime = 0.0f;
     f32 lastFrameTime = 0.0f;
 
     vulkan::Pipeline opaquePipeline;
     vulkan::Pipeline transparentPipeline;
+    vulkan::Pipeline cullingPipeline;
 
     vulkan::Image drawImage;
     vulkan::Image depthImage;
@@ -69,6 +92,8 @@ private:
 
 private:
     vulkan::Buffer sceneDataBuffer{};
+    PushConstants pushConstants;
+    vk::PushConstantRange pushConstantRanges;
 
 private:
     vulkan::Device& device;

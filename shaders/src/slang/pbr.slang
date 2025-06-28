@@ -1,81 +1,6 @@
 
+import resources;
 #define PI 3.1415926538
-
-struct Vertex {
-    float3 position;
-    float uv_x;
-    float3 normal;
-    float uv_y;
-    float4 color;
-};
-
-
-struct Material {
-    float4 baseColorFactor;
-    float metalnessFactor;
-    float roughnessFactor;
-    float emissiveStrength;
-
-    uint baseColorTexture;
-    uint mrTexture;
-    uint normalTexture;
-    uint occlusionTexture;
-    uint emissiveTexture;
-};
-
-struct Light {
-    float3 direction;
-    float3 colour;
-    float intensity;
-    float range;
-    float innerAngle;
-    float outerAngle;
-};
-
-struct PushConstants {
-    float4x4 renderMatrix;
-    ConstBufferPointer<Vertex> vertices;
-    ConstBufferPointer<Material> materials;
-    ConstBufferPointer<Light> lights;
-    uint materialIndex;
-    uint numLights;
-};
-
-[vk::push_constant] ConstantBuffer<PushConstants> pushConstants;
-
-struct SceneData {
-    float4x4 view;
-    float4x4 projection;
-    float3 cameraPosition;
-};
-
-layout(binding = 0) ConstantBuffer<SceneData> sceneData;
-
-struct VSOutput {
-    float4 color;
-    float3 normal;
-    float3 fragPosition;
-    float4 transformedPosition : SV_Position;
-    float2 uv;
-};
-
-[shader("vertex")]
-VSOutput vertexMain(uint vertexID : SV_VertexID) {
-    Vertex v = pushConstants.vertices[vertexID];
-    VSOutput output;
-    output.normal = v.normal;
-    output.color = v.color;
-    output.uv = float2(v.uv_x, v.uv_y);
-    output.fragPosition = float3(v.position);
-
-    float4 position = float4(v.position, 1.0);
-    float4x4 viewProjection = sceneData.projection * sceneData.view;
-    output.transformedPosition = mul(viewProjection, position);
-
-    return output;
-}
-
-Sampler2D textures[];
 
 [shader("pixel")]
 float4 pixelMain(VSOutput input) : SV_Target {
@@ -86,11 +11,11 @@ float4 pixelMain(VSOutput input) : SV_Target {
     float3 view = normalize(sceneData.cameraPosition - fragPosition);
 
     Material material = pushConstants.materials[pushConstants.materialIndex];
-    Sampler2D baseColorTexture = textures[material.baseColorTexture];
+    Sampler2D baseColorTexture = textures[NonUniformResourceIndex(material.baseColorTexture)];
     float4 baseColour = baseColorTexture.Sample(uv);
     float3 albedo = baseColour.rgb;
 
-    Sampler2D mrTexture = textures[material.mrTexture];
+    Sampler2D mrTexture = textures[NonUniformResourceIndex(material.mrTexture)];
     float4 mr = mrTexture.Sample(uv);
     float metalness = mr.b;
     float roughness = mr.g;
@@ -163,4 +88,3 @@ float GSmith(float3 normal, float3 view, float3 light, float roughness) {
 float3 fresnelSchlick(float normalHalfwayIncidence, float3 F0) {
     return F0 + (1.0f - F0) * pow(1.0f - normalHalfwayIncidence, 5.0f);
 }
-

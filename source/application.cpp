@@ -103,8 +103,7 @@ void Application::draw() {
     auto& currentFrame = device.get_current_frame();
 
     const auto currentSwapchainResult = device.get_swapchain_image();
-    if (!currentSwapchainResult.has_value())
-        return;
+    if (!currentSwapchainResult.has_value()) return;
     auto [currentSwapchainImage, currentSwapchainImageView] = currentSwapchainResult.value();
 
     vk::CommandBuffer& commandBuffer = currentFrame.commandBuffer;
@@ -125,6 +124,17 @@ void Application::draw() {
     uploadContext.begin();
     uploadContext.update_uniform(&sceneData, sizeof(SceneData), sceneDataBuffer);
 
+    vulkan::ComputeContext computeContext(commandBuffer);
+
+    computeContext.bind_pipeline(cullingPipeline);
+
+    auto pushConstants = build_push_constants(currentFrame);
+    constexpr auto pcFlags = vk::ShaderStageFlagBits::eCompute | vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+    computeContext.set_push_constants(&pushConstants, sizeof(PushConstants), pcFlags);
+
+    computeContext.dispatch(sceneManager->get_num_surfaces(), 1, 1);
+
+
     vulkan::GraphicsContext graphicsContext(commandBuffer);
     graphicsContext.image_barrier(drawImage.handle, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
     graphicsContext.image_barrier(depthImage.handle, vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthAttachmentOptimal);
@@ -136,7 +146,7 @@ void Application::draw() {
     graphicsContext.set_viewport(extent, 0.0f, 1.0f);
     graphicsContext.set_scissor(extent);
 
-    sceneManager->draw_scene(graphicsContext, testScene, sceneData.projection * sceneData.view);
+    sceneManager->draw_scene(graphicsContext, currentFrame);
 
     graphicsContext._commandBuffer.endRendering();
 
@@ -159,6 +169,19 @@ void Application::init_imgui() {
     imguiVariables.lights = sceneManager->get_lights();
     imguiVariables.lightNames = sceneManager->get_light_names().data();
     i32 numLights = sceneManager->get_num_lights();
+}
+
+PushConstants Application::build_push_constants(const vulkan::FrameData& frame)
+{
+    PushConstants pc;
+    pc.indirectBuffer = frame.drawIndirectCommandBuffer.deviceAddress;
+    pc.surfaceBuffer = frame.surfaceDataBuffer.deviceAddress;
+    pc.vertexBuffer = sceneManager->get_vertex_buffer(0).vertexBufferAddress;
+    pc.lightBuffer = sceneManager->get_light_buffer().deviceAddress;
+    pc.materialBuffer = sceneManager->get_material_buffer().deviceAddress;
+    pc.numLights = sceneManager->get_num_lights();
+
+    return pc;
 }
 
 void Application::draw_imgui(const vulkan::GraphicsContext& graphicsContext, const vk::ImageView& imageView, const vk::Extent2D& extent) {
@@ -225,6 +248,7 @@ void Application::init() {
     init_scene_resources();
     init_descriptors();
     init_opaque_pipeline();
+    init_culling_pipeline();
     init_imgui();
 }
 
@@ -244,7 +268,7 @@ void Application::init_descriptors() {
 
     descriptorBuilder->update_set(opaquePipeline.set);
 
-    vk::PushConstantRange pcRange(vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 0, sizeof(vulkan::PushConstants));
+    vk::PushConstantRange pcRange(vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 0, sizeof(PushConstants));
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo;
 
     pipelineLayoutInfo.setLayoutCount = 1;
@@ -258,8 +282,8 @@ void Application::init_descriptors() {
 }
 
 void Application::init_opaque_pipeline() {
-    const vulkan::Shader vertShader = device.create_shader("../shaders/meshbufferBDA.vert.spv");
-    const vulkan::Shader fragShader = device.create_shader("../shaders/pbr.frag.spv");
+    const vulkan::Shader vertShader = device.create_shader("../shaders/bin/glsl/meshbufferBDA.vert.spv");
+    const vulkan::Shader fragShader = device.create_shader("../shaders/bin/glsl/pbr.frag.spv");
 
     PipelineBuilder pipelineBuilder;
     pipelineBuilder.pipelineLayout = opaquePipeline.pipelineLayout;
@@ -293,8 +317,8 @@ void Application::init_opaque_pipeline() {
 }
 
 void Application::init_transparent_pipeline() {
-    const vulkan::Shader vertexShader = device.create_shader("../shaders/meshbufferBDA.vert.spv");
-    const vulkan::Shader fragShader = device.create_shader("../shaders/transparency.frag.spv");
+    const vulkan::Shader vertexShader = device.create_shader("../shaders/bin/glsl/meshbufferBDA.vert.spv");
+    const vulkan::Shader fragShader = device.create_shader("../shaders/bin/glsl/pbr.frag.spv");
 
     PipelineBuilder pipelineBuilder;
     pipelineBuilder.pipelineLayout = transparentPipeline.pipelineLayout;
@@ -310,6 +334,38 @@ void Application::init_transparent_pipeline() {
 
     device.get_handle().destroyShaderModule(vertexShader.module);
     device.get_handle().destroyShaderModule(fragShader.module);
+}
+
+void Application::init_culling_pipeline()
+{
+    const vulkan::Shader cullingShader = device.create_shader("../shaders/bin/glsl/frustumCulling.comp.spv");
+    vk::ComputePipelineCreateInfo computePipelineCreateInfo;
+    vk::PipelineLayoutCreateInfo layoutCI;
+
+    const auto ranges = build_push_constant_ranges(vk::ShaderStageFlagBits::eCompute | vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
+    layoutCI.pPushConstantRanges = &ranges;
+    layoutCI.pushConstantRangeCount = 1;
+
+    layoutCI.pSetLayouts = &opaquePipeline.setLayout;
+    layoutCI.setLayoutCount = 1;
+
+    computePipelineCreateInfo.layout = device.get_handle().createPipelineLayout(layoutCI);
+
+    vk::PipelineShaderStageCreateInfo shaderStageCreateInfo;
+    shaderStageCreateInfo.stage = vk::ShaderStageFlagBits::eCompute;
+    shaderStageCreateInfo.module = cullingShader.module;
+    shaderStageCreateInfo.pName = "main";
+    computePipelineCreateInfo.stage = shaderStageCreateInfo;
+
+    cullingPipeline.pipelineLayout = computePipelineCreateInfo.layout;
+    cullingPipeline.setLayout = opaquePipeline.setLayout;
+    cullingPipeline.set = opaquePipeline.set;
+
+    const auto result = device.get_handle().createComputePipeline(nullptr, computePipelineCreateInfo);
+    vk_check(result.result, "Failed to create culling compute pipeline");
+    cullingPipeline.pipeline = result.value;
+
+    device.get_handle().destroyShaderModule(cullingShader.module);
 }
 
 void Application::init_scene_resources() {
@@ -349,6 +405,8 @@ void Application::init_scene_resources() {
     device.submit_immediate_work(
         [&](vk::CommandBuffer commandBuffer) {
             uploadContext.upload_uniform(&sceneData, sizeof(SceneData), sceneDataBuffer);
+            device.init_draw_indirect_commands(sceneManager->get_num_surfaces());
+            sceneManager->build_draw_indirect_buffers(device, uploadContext, testScene);
         }
     );
 }

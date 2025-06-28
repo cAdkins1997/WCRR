@@ -3,7 +3,7 @@
 #include "../glmdefines.h"
 
 #include <vector>
-#include "../common.h"
+
 #include "../resources.h"
 #include "../device/device.h"
 
@@ -12,7 +12,7 @@ public:
     PipelineBuilder() { clear(); }
 
     void clear();
-    VkPipeline build_pipeline(vulkan::Device& device);
+    VkPipeline build_pipeline(const vulkan::Device& device);
 
     void set_shader(VkShaderModule vertexShader, VkShaderModule fragmentShader);
     void set_input_topology(VkPrimitiveTopology topology);

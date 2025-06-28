@@ -5,7 +5,7 @@ void PipelineBuilder::clear() {
     shaderStages.clear();
 }
 
-VkPipeline PipelineBuilder::build_pipeline(vulkan::Device& device) {
+VkPipeline PipelineBuilder::build_pipeline(const vulkan::Device& device) {
     VkPipelineViewportStateCreateInfo viewportState{.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
     viewportState.viewportCount = 1;
     viewportState.scissorCount = 1;
@@ -45,7 +45,7 @@ VkPipeline PipelineBuilder::build_pipeline(vulkan::Device& device) {
     return newPipeline;
 }
 
-void PipelineBuilder::set_shader(VkShaderModule vertexShader, VkShaderModule fragmentShader) {
+void PipelineBuilder::set_shader(const VkShaderModule vertexShader, const VkShaderModule fragmentShader) {
     shaderStages.clear();
     shaderStages.push_back(VkPipelineShaderStageCreateInfo{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,

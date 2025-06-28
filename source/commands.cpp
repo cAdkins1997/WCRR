@@ -75,15 +75,20 @@ namespace vulkan {
         _commandBuffer.blitImage2(&blitInfo);
     }
 
-    void ComputeContext::bind_pipeline(const vulkan::Pipeline &pipeline) {
+    void ComputeContext::bind_pipeline(const Pipeline &pipeline) {
         _pipeline = pipeline;
 
-        _commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
-        _commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipelineLayout, 0, 1, &pipeline.set, 0, nullptr);
+        _commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline.pipeline);
+        _commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline.pipelineLayout, 0, 1, &pipeline.set, 0, nullptr);
     }
 
     void ComputeContext::dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) const {
         _commandBuffer.dispatch(groupCountX, groupCountY, groupCountZ);
+    }
+
+    void ComputeContext::set_push_constants(const void* pPushConstants, const u64 size, const vk::ShaderStageFlags shaderStage) const
+    {
+        _commandBuffer.pushConstants(_pipeline.pipelineLayout, shaderStage, 0, size, pPushConstants);
     }
 
     UploadContext::UploadContext(
@@ -476,5 +481,10 @@ namespace vulkan {
 
     void GraphicsContext::draw(uint32_t count, uint32_t startIndex) const {
         _commandBuffer.drawIndexed(count, 1, startIndex, 0, 0);
+    }
+
+    void GraphicsContext::draw_indirect(const Buffer& buffer, const u64 count) const
+    {
+        _commandBuffer.drawIndexedIndirect(buffer.handle, 0, count, sizeof(vk::DrawIndexedIndirectCommand));
     }
 }
