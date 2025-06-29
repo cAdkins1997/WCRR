@@ -1,6 +1,6 @@
 #pragma once
 
-#include "resources.h"
+#include "rendererresources.h"
 #include "glmdefines.h"
 
 namespace vulkan {

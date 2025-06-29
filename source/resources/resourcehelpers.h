@@ -1,11 +1,10 @@
 #pragma once
 
 #include "../common.h"
-#include "../resources.h"
+#include "../rendererresources.h"
 #include "../glmdefines.h"
 
-namespace vulkan {
-
+namespace renderer {
     template<typename T>
     u32 get_handle_index(const T handle) {
         constexpr u32 indexMask = (1 << 16) - 1;
@@ -20,12 +19,6 @@ namespace vulkan {
         const auto handleAsU32 = static_cast<u32>(handle);
         return (handleAsU32 & metaDataMask) >> 16;
     }
-
-    template<typename T>
-    concept isHandle = requires(T a)
-    {
-        std::is_enum<T>::type;
-    };
 
     [[nodiscard]] Buffer make_staging_buffer(u64 allocSize, VmaAllocator allocator);
     [[nodiscard]] Buffer create_device_buffer(u64 size, VkBufferUsageFlags bufferUsage, VmaAllocator allocator);

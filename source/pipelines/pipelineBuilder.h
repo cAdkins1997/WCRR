@@ -4,7 +4,7 @@
 
 #include <vector>
 #include "../common.h"
-#include "../resources.h"
+#include "../rendererresources.h"
 #include "../device/device.h"
 
 class PipelineBuilder {

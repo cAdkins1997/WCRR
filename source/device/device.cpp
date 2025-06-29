@@ -1,8 +1,8 @@
 #include "device.h"
 
 #include <imgui.h>
-#include <imgui_impl_glfw.h>
-#include <imgui_impl_vulkan.h>
+#include <backends/imgui_impl_glfw.h>
+#include <backends/imgui_impl_vulkan.h>
 
 namespace vulkan {
 
@@ -150,7 +150,7 @@ namespace vulkan {
             throw std::runtime_error("Failed to find file!\n");
         }
 
-        u64 fileSize = file.tellg();
+        const u64 fileSize = file.tellg();
 
         std::vector<u32> buffer(fileSize / sizeof(u32));
 
@@ -536,7 +536,6 @@ namespace vulkan {
         initInfo.PipelineRenderingCreateInfo.depthAttachmentFormat = VK_FORMAT_D32_SFLOAT;
         initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
         ImGui_ImplVulkan_Init(&initInfo);
-        ImGui_ImplVulkan_CreateFontsTexture();
     }
 
     FrameData& Device::get_current_frame() {
@@ -567,7 +566,7 @@ namespace vulkan {
             debugCI.messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
                                       vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
                                       vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation;
-            debugCI.pfnUserCallback = debugMessageFunc;
+            //debugCI.pfnUserCallback = debugMessageFunc;
         }
 
         vk_check(

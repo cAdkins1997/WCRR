@@ -1,7 +1,7 @@
 
 #pragma once
 #include "device/device.h"
-#include "resources.h"
+#include "rendererresources.h"
 #include "pipelines/descriptors.h"
 
 #include "scene/camera.h"
@@ -30,6 +30,7 @@ struct ImGUIVariables {
 inline auto camera = vulkan::Camera(glm::vec3(0.0f, 10.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f), -90.0f, 0.0f);;
 inline bool firstMouse = true;
 inline f32 lastX = 400, lastY = 300;
+inline u32 inputDelay = 0;
 
 void mouse_callback(GLFWwindow* window, f64 xposIn, f64 yposIn);
 void process_scroll(GLFWwindow* window, double xoffset, double yoffset);

@@ -32,7 +32,7 @@ void process_scroll(GLFWwindow *window, double xoffset, double yoffset) {
     camera.process_mouse_scroll(static_cast<float>(yoffset));
 }
 
-void process_input(GLFWwindow *window, f32 deltaTime, bool& mouseLook) {
+void process_input(GLFWwindow *window, const f32 deltaTime, u32& inputDelay, bool& mouseLook) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
 
@@ -49,16 +49,20 @@ void process_input(GLFWwindow *window, f32 deltaTime, bool& mouseLook) {
     if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS)
         camera.process_keyboard(vulkan::DOWN, deltaTime);
 
-    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) {
+    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS &&  inputDelay == 0) {
         if (mouseLook) {
             mouseLook = false;
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_CAPTURED);
+            inputDelay += 120;
         }
         else {
             mouseLook = true;
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            inputDelay += 120;
         }
     }
+
+    if (inputDelay > 0) inputDelay--;
 }
 
 Application::Application(vulkan::Device& _device) : device(_device) {
@@ -103,13 +107,12 @@ void Application::draw() {
     auto& currentFrame = device.get_current_frame();
 
     const auto currentSwapchainResult = device.get_swapchain_image();
-    if (!currentSwapchainResult.has_value())
-        return;
+    if (!currentSwapchainResult.has_value()) return;
     auto [currentSwapchainImage, currentSwapchainImageView] = currentSwapchainResult.value();
 
     vk::CommandBuffer& commandBuffer = currentFrame.commandBuffer;
 
-    process_input(device.get_window(), deltaTime, camera.enableMouseLook);
+    process_input(device.get_window(), deltaTime, inputDelay, camera.enableMouseLook);
 
     SceneData sceneData{};
     sceneData.view = camera.get_view_matrix();
@@ -235,7 +238,7 @@ void Application::update() {
 
 void Application::init_descriptors() {
     descriptorBuilder = std::make_unique<vulkan::DescriptorBuilder>(device);
-    auto globalSet = descriptorBuilder->build(opaquePipeline.setLayout);
+    const auto globalSet = descriptorBuilder->build(opaquePipeline.setLayout);
     opaquePipeline.set = globalSet;
     transparentPipeline.set = globalSet;
     descriptorBuilder->write_buffer(sceneDataBuffer.handle, sizeof(SceneData), 0, vk::DescriptorType::eUniformBuffer);
@@ -258,8 +261,8 @@ void Application::init_descriptors() {
 }
 
 void Application::init_opaque_pipeline() {
-    const vulkan::Shader vertShader = device.create_shader("../shaders/meshbufferBDA.vert.spv");
-    const vulkan::Shader fragShader = device.create_shader("../shaders/pbr.frag.spv");
+    const vulkan::Shader vertShader = device.create_shader("../shaders/bin/glsl/meshbufferBDA.vert.spv");
+    const vulkan::Shader fragShader = device.create_shader("../shaders/bin/glsl/pbr.frag.spv");
 
     PipelineBuilder pipelineBuilder;
     pipelineBuilder.pipelineLayout = opaquePipeline.pipelineLayout;
@@ -293,8 +296,8 @@ void Application::init_opaque_pipeline() {
 }
 
 void Application::init_transparent_pipeline() {
-    const vulkan::Shader vertexShader = device.create_shader("../shaders/meshbufferBDA.vert.spv");
-    const vulkan::Shader fragShader = device.create_shader("../shaders/transparency.frag.spv");
+    const vulkan::Shader vertexShader = device.create_shader("../shaders/bin/glsl/meshbufferBDA.vert.spv");
+    const vulkan::Shader fragShader = device.create_shader("../shaders/bin/glsl/transparency.frag.spv");
 
     PipelineBuilder pipelineBuilder;
     pipelineBuilder.pipelineLayout = transparentPipeline.pipelineLayout;

@@ -13,7 +13,7 @@
 #include <ktx.h>
 
 #include "../commands.h"
-#include "../resources.h"
+#include "../rendererresources.h"
 
 namespace vulkan {
     class DescriptorBuilder;
@@ -22,15 +22,6 @@ namespace vulkan {
     struct GraphicsContext;
     struct UploadContext;
     class SceneManager;
-
-    typedef ktx_uint64_t ku64;
-    typedef ktx_uint32_t ku32;
-    typedef ktx_uint16_t ku16;
-    typedef ktx_uint8_t ku8;
-
-    typedef ktx_int64_t ki64;
-    typedef ktx_int32_t ki32;
-    typedef ktx_int16_t ki16;
 
     struct Sampler {
         vk::Filter magFilter;

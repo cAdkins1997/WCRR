@@ -35,8 +35,9 @@ namespace vulkan {
             pc.materialIndex = get_handle_index(surface.material);
             graphicsContext.set_push_constants(&pc, sizeof(pc), vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
             graphicsContext.draw(surface.indexCount, surface.initialIndex);
-            scene.renderables.clear();
         }
+
+        scene.renderables.clear();
     }
 
     void SceneManager::cpu_frustum_culling(Scene& scene, const glm::mat4& viewProjectionMatrix) {
@@ -508,6 +509,7 @@ namespace vulkan {
 
         auto data = fastgltf::GltfDataBuffer::FromPath(path);
         if (data.error() != fastgltf::Error::None) {
+            std::cout << "Failed to read gltf"
             throw std::runtime_error("Failed to read glTF file");
         }
 
