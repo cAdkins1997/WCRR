@@ -32,10 +32,11 @@ struct ImGUIVariables {
 inline auto camera = vulkan::Camera(glm::vec3(0.0f, 10.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f), -90.0f, 0.0f);;
 inline bool firstMouse = true;
 inline f32 lastX = 400, lastY = 300;
+inline u32 inputDelay = 0;
 
 void mouse_callback(GLFWwindow* window, f64 xposIn, f64 yposIn);
-void process_scroll(GLFWwindow* window, double xoffset, double yoffset);
-void process_input(GLFWwindow *window, f32 deltaTime, bool& mouseLook);
+void process_scroll(GLFWwindow* window, f64 xoffset, f64 yoffset);
+void process_input(GLFWwindow *window, f32 deltaTime, u32& inputDelay, bool& mouseLook);
 
 class Application {
 public:

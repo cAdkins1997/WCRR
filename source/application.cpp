@@ -8,7 +8,7 @@
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
 
-void mouse_callback(GLFWwindow *window, double xposIn, double yposIn) {
+void mouse_callback(GLFWwindow *window, f64 xposIn, f64 yposIn) {
     auto xpos = static_cast<float>(xposIn);
     auto ypos = static_cast<float>(yposIn);
 
@@ -28,11 +28,11 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn) {
     camera.process_mouse_movement(xoffset, yoffset, false);
 }
 
-void process_scroll(GLFWwindow *window, double xoffset, double yoffset) {
+void process_scroll(GLFWwindow *window, f64 xoffset, f64 yoffset) {
     camera.process_mouse_scroll(static_cast<float>(yoffset));
 }
 
-void process_input(GLFWwindow *window, f32 deltaTime, bool& mouseLook) {
+void process_input(GLFWwindow *window, const f32 deltaTime, u32& inputDelay, bool& mouseLook) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
 
@@ -49,16 +49,20 @@ void process_input(GLFWwindow *window, f32 deltaTime, bool& mouseLook) {
     if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS)
         camera.process_keyboard(vulkan::DOWN, deltaTime);
 
-    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) {
+    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS &&  inputDelay == 0) {
         if (mouseLook) {
             mouseLook = false;
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_CAPTURED);
+            inputDelay += 360;
         }
         else {
             mouseLook = true;
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            inputDelay += 360;
         }
     }
+
+    if (inputDelay > 0) inputDelay--;
 }
 
 Application::Application(vulkan::Device& _device) : device(_device) {
@@ -109,7 +113,7 @@ void Application::draw() {
 
     vk::CommandBuffer& commandBuffer = currentFrame.commandBuffer;
 
-    process_input(device.get_window(), deltaTime, camera.enableMouseLook);
+    process_input(device.get_window(), deltaTime, inputDelay, camera.enableMouseLook);
 
     SceneData sceneData{};
     sceneData.view = camera.get_view_matrix();

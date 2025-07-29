@@ -229,8 +229,6 @@
                 node.mesh = mesh;
                 node.parent = parent;
 
-                if (node.worldMatrix == glm::mat4(0.0f)) node.worldMatrix = glm::mat4(1.0f);
-
                 nodes.push_back(node);
             }
 
