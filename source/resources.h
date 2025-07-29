@@ -21,6 +21,7 @@ namespace vulkan {
         VmaAllocation allocation;
         VmaAllocationInfo info;
         vk::MemoryPropertyFlags properties;
+        vk::DeviceAddress address;
 
         void* get_mapped_data() { return info.pMappedData; }
     };

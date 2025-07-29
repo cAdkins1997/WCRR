@@ -1,8 +1,8 @@
 #include "device.h"
 
 #include <imgui.h>
-#include <imgui_impl_glfw.h>
-#include <imgui_impl_vulkan.h>
+#include "backends/imgui_impl_glfw.h"
+#include "backends/imgui_impl_vulkan.h"
 
 namespace vulkan {
 
@@ -61,10 +61,12 @@ namespace vulkan {
     }
 
     Buffer Device::create_buffer(
-        size_t allocationSize,
+        const u64 allocationSize,
         vk::BufferUsageFlags usage,
-        VmaMemoryUsage memoryUsage,
-        VmaAllocationCreateFlags flags) {
+        const VmaMemoryUsage memoryUsage,
+        const VmaAllocationCreateFlags flags) const {
+
+        usage |= vk::BufferUsageFlagBits::eShaderDeviceAddress;
 
         vk::BufferCreateInfo bufferInfo;
         bufferInfo.pNext = nullptr;
@@ -78,6 +80,9 @@ namespace vulkan {
         Buffer newBuffer{};
 
         vmaCreateBuffer(allocator, reinterpret_cast<VkBufferCreateInfo*>(&bufferInfo), &vmaallocInfo, (VkBuffer*)&newBuffer.handle, &newBuffer.allocation, &newBuffer.info);
+
+        vk::BufferDeviceAddressInfo bdaInfo(newBuffer.handle);
+        newBuffer.address = handle.getBufferAddress(bdaInfo);
 
         return newBuffer;
     }
@@ -127,7 +132,7 @@ namespace vulkan {
         return newImage;
     }
 
-    Sampler Device::create_sampler(const vk::Filter minFilter, const vk::Filter magFilter, const vk::SamplerMipmapMode mipmapMode) const {
+    scenemanager::Sampler Device::create_sampler(const vk::Filter minFilter, const vk::Filter magFilter, const vk::SamplerMipmapMode mipmapMode) const {
 
         vk::SamplerCreateInfo samplerCI;
         samplerCI.minFilter = minFilter;
@@ -140,7 +145,7 @@ namespace vulkan {
             "failed to create sampler"
             );
 
-        return Sampler{magFilter, minFilter, newSampler};
+        return scenemanager::Sampler{magFilter, minFilter, newSampler};
     }
 
     Shader Device::create_shader(std::string_view filePath) const {
@@ -389,7 +394,7 @@ namespace vulkan {
 
     void Device::init_draw_images() {
         const VkExtent3D drawImageExtent {width, height, 1};
-        drawImage.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+        drawImage.format = VK_FORMAT_B8G8R8A8_UNORM;
         drawImage.extent = drawImageExtent;
 
         VkImageUsageFlags drawImageUsages =
@@ -536,7 +541,7 @@ namespace vulkan {
         initInfo.PipelineRenderingCreateInfo.depthAttachmentFormat = VK_FORMAT_D32_SFLOAT;
         initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
         ImGui_ImplVulkan_Init(&initInfo);
-        ImGui_ImplVulkan_CreateFontsTexture();
+        //ImGui_ImplVulkan_CreateFontsTexture();
     }
 
     FrameData& Device::get_current_frame() {
@@ -567,7 +572,7 @@ namespace vulkan {
             debugCI.messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
                                       vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
                                       vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation;
-            debugCI.pfnUserCallback = debugMessageFunc;
+            //debugCI.pfnUserCallback = debugMessageFunc;
         }
 
         vk_check(

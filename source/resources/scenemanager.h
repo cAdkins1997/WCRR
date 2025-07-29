@@ -21,6 +21,10 @@ namespace vulkan {
 
     struct GraphicsContext;
     struct UploadContext;
+}
+
+namespace vulkan::scenemanager {
+
     class SceneManager;
 
     typedef ktx_uint64_t ku64;
@@ -115,9 +119,6 @@ namespace vulkan {
     enum LightType : u8 {
         Directional, Point, Spot
     };
-
-    struct Colour { f32 r, g, b; };
-    struct Pos3 { f32 x, y, z; };
 
     struct Light {
         alignas(16) glm::vec3 position{};
@@ -244,7 +245,7 @@ namespace vulkan {
 
         void set_texture_sampler(TextureHandle textureHandle, SamplerHandle samplerHandle);
 
-    private:
+    public:
         Device& device;
         UploadContext& context;
         PushConstants pc;

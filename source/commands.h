@@ -2,6 +2,7 @@
 
 #include "resources.h"
 #include "glmdefines.h"
+#include "device/debug.h"
 
 namespace vulkan {
     class Image;
@@ -41,6 +42,7 @@ namespace vulkan {
         void copy_buffer(const Buffer &bufferSrc, const Buffer &bufferDst, vk::DeviceSize srcOffset, vk::DeviceSize dstOffset, vk::DeviceSize dataSize) const;
         void copy_image(vk::Image src, vk::Image dst, vk::Extent3D srcSize, vk::Extent3D dstSize) const;
         void copy_buffer_to_image(const Buffer& buffer, const Image& image, vk::ImageLayout layout, const std::vector<vk::BufferImageCopy>& regions) const;
+        void copy_buffer_to_image(const Buffer& buffer, const Image& image, vk::Extent3D extent, vk::ImageLayout layout);
 
         void upload_image(void* data, const Image& image) const;
         void upload_uniform(void* data, size_t dataSize, Buffer& uniform) const;

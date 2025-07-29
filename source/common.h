@@ -2,7 +2,12 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_to_string.hpp>
+
+#ifdef WIN32
 #include <vma/vk_mem_alloc.h>
+#else
+#include <vk_mem_alloc.h>
+#endif
 
 typedef uint8_t u8;
 typedef int8_t i8;
@@ -15,5 +20,3 @@ typedef int64_t i64;
 
 typedef float f32;
 typedef double f64;
-
-void vk_check(vk::Result result, const std::string& outputString);

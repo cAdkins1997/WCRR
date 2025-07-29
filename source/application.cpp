@@ -68,14 +68,14 @@ Application::Application(vulkan::Device& _device) : device(_device) {
     glfwSetInputMode(device.get_window(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     vulkan::UploadContext uploadContext(device.get_handle(), device.immediateCommandBuffer, device.get_allocator());
-    sceneManager = std::make_unique<vulkan::SceneManager>(device, uploadContext);
+    //sceneManager = std::make_unique<vulkan::scenemanager::SceneManager>(device, uploadContext);
     init();
     run();
 }
 
 Application::~Application() {
     vkDeviceWaitIdle(device.get_handle());
-    sceneManager->release_gpu_resources();
+    //sceneManager->release_gpu_resources();
     descriptorBuilder->release_descriptor_resources();
     device.get_handle().destroyPipeline(opaquePipeline.pipeline);
     device.get_handle().destroyPipelineLayout(opaquePipeline.pipelineLayout);
@@ -136,7 +136,8 @@ void Application::draw() {
     graphicsContext.set_viewport(extent, 0.0f, 1.0f);
     graphicsContext.set_scissor(extent);
 
-    sceneManager->draw_scene(graphicsContext, testScene, sceneData.projection * sceneData.view);
+    //sceneManager->draw_scene(graphicsContext, testScene, sceneData.projection * sceneData.view);
+    assetManager->draw_scene(graphicsContext, sceneData.projection * sceneData.view);
 
     graphicsContext._commandBuffer.endRendering();
 
@@ -156,9 +157,9 @@ void Application::draw() {
 
 void Application::init_imgui() {
     device.init_imgui();
-    imguiVariables.lights = sceneManager->get_lights();
-    imguiVariables.lightNames = sceneManager->get_light_names().data();
-    i32 numLights = sceneManager->get_num_lights();
+    imguiVariables.lights = assetManager->get_lights();
+    imguiVariables.lightNames = assetManager->get_light_names();
+    i32 numLights = assetManager->get_num_lights();
 }
 
 void Application::draw_imgui(const vulkan::GraphicsContext& graphicsContext, const vk::ImageView& imageView, const vk::Extent2D& extent) {
@@ -196,9 +197,9 @@ void Application::imgui_light_info(const vulkan::GraphicsContext& graphicsContex
     ImGui::BeginChild("Light Settings");
     ImGui::Text("Light Settings");
 
-    auto label = "Lights";
+    const auto label = "Lights";
     ImGui::Combo(label, &imguiVariables.selectedLight, imguiVariables.lightNames, imguiVariables.numLights);
-    vulkan::Light* currentLight = &imguiVariables.lights[imguiVariables.selectedLight];
+    vulkan::assetmanager::Light* currentLight = &imguiVariables.lights[imguiVariables.selectedLight];
 
     if (ImGui::InputFloat3("Position", reinterpret_cast<float*>(&currentLight->position))) {
         imguiVariables.lightsDirty = true;
@@ -214,7 +215,8 @@ void Application::imgui_light_info(const vulkan::GraphicsContext& graphicsContex
 
 
     if (imguiVariables.lightsDirty) {
-        sceneManager->update_light_buffer();
+        //sceneManager->update_light_buffer();
+        assetManager->update_light_buffer();
         imguiVariables.lightsDirty = false;
     }
 
@@ -229,8 +231,10 @@ void Application::init() {
 }
 
 void Application::update() {
-    sceneManager->update_nodes(glm::mat4(1.0f), testScene);
-    sceneManager->update_light_buffer();
+    //sceneManager->update_nodes(glm::mat4(1.0f), testScene);
+    //sceneManager->update_light_buffer();
+    assetManager->update_nodes(glm::mat4(1.0f));
+    assetManager->update_light_buffer();
 }
 
 void Application::init_descriptors() {
@@ -240,11 +244,10 @@ void Application::init_descriptors() {
     transparentPipeline.set = globalSet;
     descriptorBuilder->write_buffer(sceneDataBuffer.handle, sizeof(SceneData), 0, vk::DescriptorType::eUniformBuffer);
 
-    sceneManager->write_textures(*descriptorBuilder);
-
+    assetManager->write_textures(*descriptorBuilder);
     descriptorBuilder->update_set(opaquePipeline.set);
 
-    vk::PushConstantRange pcRange(vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 0, sizeof(vulkan::PushConstants));
+    vk::PushConstantRange pcRange(vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 0, sizeof(vulkan::scenemanager::PushConstants));
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo;
 
     pipelineLayoutInfo.setLayoutCount = 1;
@@ -329,12 +332,24 @@ void Application::init_scene_resources() {
         VMA_ALLOCATION_CREATE_MAPPED_BIT
         );
 
-    if (auto gltf = sceneManager->load_gltf("../assets/scenes/sponza/NewSponza_Main_glTF_003.gltf"); gltf.has_value()) {
+    /*if (auto gltf = sceneManager->load_gltf("../assets/scenes/sponza/NewSponza_Main_glTF_003.gltf"); gltf.has_value()) {
         testScene = sceneManager->create_scene(gltf.value());
         update();
-    }
+    }*/
 
     vulkan::UploadContext uploadContext(device.get_handle(), device.immediateCommandBuffer, device.get_allocator());
+    constexpr auto jsonPath = "../assets/scenes/sponza/sponza.json";
+    constexpr auto binPath = "../assets/scenes/sponza/sponza.bin";
+    sceneDesc = std::make_unique<vulkan::assetloading::SceneDescription>(
+            vulkan::assetloading::load_scene(
+                    uploadContext,
+                    device,
+                    jsonPath,
+                    binPath));
+    assetManager = std::make_unique<vulkan::assetmanager::AssetManager>(
+            vulkan::assetmanager::AssetManager(device, uploadContext));
+    assetManager->add_asset(*sceneDesc);
+
 
     SceneData sceneData{};
     sceneData.view = camera.get_view_matrix();

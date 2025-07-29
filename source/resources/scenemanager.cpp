@@ -4,7 +4,7 @@
 #include "resourcehelpers.h"
 #include "../application.h"
 
-namespace vulkan {
+namespace vulkan::scenemanager {
     void Node::refresh(const glm::mat4& parentMatrix, SceneManager& sceneManager) {
         worldMatrix = parentMatrix * localMatrix;
         for (const auto childHandle : children) {

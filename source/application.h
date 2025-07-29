@@ -11,7 +11,9 @@
 
 #include "glmdefines.h"
 
-#include "pipelines/descriptors.h"
+#include "resources/assetloading.h"
+#include "resources/test.h"
+#include "resources/assetmanager.h"
 
 struct SceneData {
     glm::mat4 view;
@@ -22,7 +24,7 @@ struct SceneData {
 struct ImGUIVariables {
     i32 selectedLight = 0;
     i32 numLights = 0;
-    vulkan::Light* lights;
+    vulkan::assetmanager::Light* lights;
     char* lightNames = nullptr;
     bool lightsDirty = false;
 };
@@ -75,7 +77,9 @@ private:
     vulkan::SceneHandle testScene;
 
     std::unique_ptr<vulkan::DescriptorBuilder> descriptorBuilder;
-    std::unique_ptr<vulkan::SceneManager> sceneManager;
+    //std::unique_ptr<vulkan::scenemanager::SceneManager> sceneManager;
+    std::unique_ptr<vulkan::assetloading::SceneDescription> sceneDesc;
+    std::unique_ptr<vulkan::assetmanager::AssetManager> assetManager;
 
 private:
     ImGUIVariables imguiVariables;

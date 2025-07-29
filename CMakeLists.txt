@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 project(TESTWCGL)
 
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 26)
 
 add_executable(${PROJECT_NAME}
         source/common.h
@@ -30,6 +30,16 @@ add_executable(${PROJECT_NAME}
         source/pipelines/descriptors.h
         source/device/debug.h
         source/device/debug.cpp
+        source/resources/assetloading.cpp
+        source/resources/assetloading.h
+        source/resources/test.cpp
+        source/resources/test.h
+        source/resources/assetmanager.cpp
+        source/resources/assetmanager.h
+        include/aftermath/include/GFSDK_Aftermath.h
+        include/aftermath/include/GFSDK_Aftermath_Defines.h
+        include/aftermath/include/GFSDK_Aftermath_GpuCrashDump.h
+        include/aftermath/include/GFSDK_Aftermath_GpuCrashDumpDecoding.h
 )
 
 if (WIN32)
@@ -64,8 +74,6 @@ if (WIN32)
     target_include_directories("imgui" PUBLIC ${IMGUI_PATH})
     target_link_libraries("imgui" PRIVATE glfw Vulkan::Vulkan)
 
-    set(EASTL_LIBRARY debug ${z}/build/Debug/EASTL.lib optimized ${EASTL_ROOT_DIR}/build/Release/EASTL.lib)
-
     set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
     set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -79,29 +87,60 @@ if (WIN32)
             KTX::ktx
     )
 
-    set(SLANGC "$ENV{VULKAN_SDK}/Bin/slangc.exe")
-    file(GLOB_RECURSE SLANG_SOURCE_FILES "${PROJECT_SOURCE_DIR}/shaders/*.slang")
-    foreach(SLANG ${SLANG_SOURCE_FILES})
+    if (${CMAKE_HOST_SYSTEM_PROCESSOR} STREQUAL "AMD64")
+        set(GLSL_VALIDATOR "$ENV{VULKAN_SDK}/Bin/glslangValidator.exe")
+    else()
+        set(GLSL_VALIDATOR "$ENV{VULKAN_SDK}/Bin32/glslangValidator.exe")
+    endif()
+    file(GLOB_RECURSE GLSL_SOURCE_FILES
+            "${PROJECT_SOURCE_DIR}/shaders/*.frag"
+            "${PROJECT_SOURCE_DIR}/shaders/*.vert"
+            "${PROJECT_SOURCE_DIR}/shaders/*.comp"
+    )
+    foreach(GLSL ${GLSL_SOURCE_FILES})
         message(STATUS "BUILDING SHADER")
-        get_filename_component(FILE_NAME ${SLANG} NAME)
+        get_filename_component(FILE_NAME ${GLSL} NAME)
         set(SPIRV "${PROJECT_SOURCE_DIR}/shaders/${FILE_NAME}.spv")
-        message(STATUS ${SLANG})
+        message(STATUS ${GLSL})
         add_custom_command(
                 OUTPUT ${SPIRV}
                 COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_BINARY_DIR}/shaders/"
-                COMMAND ${SLANGC} ${SLANG} -target spirv -o ${SPIRV}
-                DEPENDS ${SLANG})
+                #COMMAND ${GLSL_VALIDATOR} -V ${GLSL} -o ${SPIRV}
+                COMMAND ${GLSL_VALIDATOR} -V ${GLSL} -o ${SPIRV} -g
+                DEPENDS ${GLSL})
         list(APPEND SPIRV_BINARY_FILES ${SPIRV})
-    endforeach(SLANG)
+    endforeach(GLSL)
 
 elseif (UNIX AND NOT APPLE)
     find_package(Vulkan REQUIRED)
-    find_package(unofficial-spirv-reflect CONFIG REQUIRED)
     find_package(zstd CONFIG REQUIRED)
-    find_package(Ktx CONFIG REQUIRED)
+    find_package(Ktx CONFIG REQUIRED HINTS "/home/winter/.vcpkg-clion/vcpkg/packages/ktx_x64-linux")
 
     add_subdirectory(include/glfw)
     add_subdirectory(include/fastgltf)
+
+    set(IMGUI_PATH ${CMAKE_CURRENT_LIST_DIR}/include/imgui)
+    file(GLOB IMGUI_GLOB
+            ${IMGUI_PATH}/imgui.h
+            ${IMGUI_PATH}/imgui.cpp
+            ${IMGUI_PATH}/imconfig.h
+            ${IMGUI_PATH}/imgui_demo.cpp
+            ${IMGUI_PATH}/imgui_draw.cpp
+            ${IMGUI_PATH}/imgui_internal.h
+            ${IMGUI_PATH}/imstb_rectpack.h
+            ${IMGUI_PATH}/imstb_textedit.h
+            ${IMGUI_PATH}/imstb_truetype.h
+            ${IMGUI_PATH}/imgui_tables.cpp
+            ${IMGUI_PATH}/imgui_widgets.cpp
+
+            ${IMGUI_PATH}/backends/imgui_impl_glfw.h
+            ${IMGUI_PATH}/backends/imgui_impl_glfw.cpp
+            ${IMGUI_PATH}/backends/imgui_impl_vulkan.h
+            ${IMGUI_PATH}/backends/imgui_impl_vulkan.cpp)
+
+    add_library("imgui" STATIC ${IMGUI_GLOB})
+    target_include_directories("imgui" PUBLIC ${IMGUI_PATH})
+    target_link_libraries("imgui" PRIVATE glfw Vulkan::Vulkan)
 
     set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
     set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -112,34 +151,35 @@ elseif (UNIX AND NOT APPLE)
             Vulkan::Vulkan
             glfw
             fastgltf::fastgltf
-            unofficial::spirv-reflect
-            KTX::ktx
+            KTX::ktx KTX::astcenc-avx2-static
+            imgui
     )
+
+    if (${CMAKE_HOST_SYSTEM_PROCESSOR} STREQUAL "AMD64")
+        set(GLSL_VALIDATOR "/usr/bin/glslangValidator")
+    else()
+        set(GLSL_VALIDATOR "/usr/bin/glslangValidator")
+    endif()
+    file(GLOB_RECURSE GLSL_SOURCE_FILES
+            "${PROJECT_SOURCE_DIR}/shaders/*.frag"
+            "${PROJECT_SOURCE_DIR}/shaders/*.vert"
+            "${PROJECT_SOURCE_DIR}/shaders/*.comp"
+    )
+    foreach(GLSL ${GLSL_SOURCE_FILES})
+        message(STATUS "BUILDING SHADER")
+        get_filename_component(FILE_NAME ${GLSL} NAME)
+        set(SPIRV "${PROJECT_SOURCE_DIR}/shaders/${FILE_NAME}.spv")
+        message(STATUS ${GLSL})
+        add_custom_command(
+                OUTPUT ${SPIRV}
+                COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_BINARY_DIR}/shaders/"
+                #COMMAND ${GLSL_VALIDATOR} -V ${GLSL} -o ${SPIRV}
+                COMMAND ${GLSL_VALIDATOR} -V ${GLSL} -o ${SPIRV} -g
+                DEPENDS ${GLSL})
+        list(APPEND SPIRV_BINARY_FILES ${SPIRV})
+    endforeach(GLSL)
 endif ()
 
-if (${CMAKE_HOST_SYSTEM_PROCESSOR} STREQUAL "AMD64")
-    set(GLSL_VALIDATOR "$ENV{VULKAN_SDK}/Bin/glslangValidator.exe")
-else()
-    set(GLSL_VALIDATOR "$ENV{VULKAN_SDK}/Bin32/glslangValidator.exe")
-endif()
-file(GLOB_RECURSE GLSL_SOURCE_FILES
-        "${PROJECT_SOURCE_DIR}/shaders/*.frag"
-        "${PROJECT_SOURCE_DIR}/shaders/*.vert"
-        "${PROJECT_SOURCE_DIR}/shaders/*.comp"
-)
-foreach(GLSL ${GLSL_SOURCE_FILES})
-    message(STATUS "BUILDING SHADER")
-    get_filename_component(FILE_NAME ${GLSL} NAME)
-    set(SPIRV "${PROJECT_SOURCE_DIR}/shaders/${FILE_NAME}.spv")
-    message(STATUS ${GLSL})
-    add_custom_command(
-            OUTPUT ${SPIRV}
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_BINARY_DIR}/shaders/"
-            #COMMAND ${GLSL_VALIDATOR} -V ${GLSL} -o ${SPIRV}
-            COMMAND ${GLSL_VALIDATOR} -V ${GLSL} -o ${SPIRV}
-            DEPENDS ${GLSL})
-    list(APPEND SPIRV_BINARY_FILES ${SPIRV})
-endforeach(GLSL)
 add_custom_target(
         Shaders
         DEPENDS ${SPIRV_BINARY_FILES}

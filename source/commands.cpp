@@ -185,6 +185,13 @@ namespace vulkan {
         _commandBuffer.copyBufferToImage(buffer.handle, image.handle, layout, regions.size(), regions.data());
     }
 
+    void UploadContext::copy_buffer_to_image(const Buffer &buffer, const Image &image, vk::Extent3D extent, vk::ImageLayout layout) {
+        vk::BufferImageCopy region;
+        region.imageSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1};
+        region.imageExtent = extent;
+        _commandBuffer.copyBufferToImage(buffer.handle, image.handle, layout, 1, &region);
+    }
+
     void UploadContext::upload_image(void *data, const Image &image) const {
         const auto extent = image.extent;
         const u64 size = extent.width * extent.height * extent.depth * 4;

@@ -16,7 +16,10 @@
 
 namespace vulkan {
     struct Buffer;
-    struct Sampler;
+
+    namespace scenemanager {
+        struct Sampler;
+    }
 
     struct GraphicsContext;
     struct ComputeContext;
@@ -102,9 +105,9 @@ namespace vulkan {
             size_t allocationSize,
             vk::BufferUsageFlags usage,
             VmaMemoryUsage memoryUsage,
-            VmaAllocationCreateFlags flags = VmaAllocationCreateFlagBits::VMA_ALLOCATION_CREATE_MAPPED_BIT);
+            VmaAllocationCreateFlags flags = VmaAllocationCreateFlagBits::VMA_ALLOCATION_CREATE_MAPPED_BIT) const;
         [[nodiscard]] Image create_image(vk::Extent3D size, VkFormat format, VkImageUsageFlags usage, u32 mipLevels, bool mipmapped) const;
-        [[nodiscard]] Sampler create_sampler(vk::Filter minFilter, vk::Filter magFilter, vk::SamplerMipmapMode mipmapMode) const;
+        [[nodiscard]] scenemanager::Sampler create_sampler(vk::Filter minFilter, vk::Filter magFilter, vk::SamplerMipmapMode mipmapMode) const;
         [[nodiscard]] Shader create_shader(std::string_view filePath) const;
 
         void submit_graphics_work(const GraphicsContext& context, vk::PipelineStageFlagBits2 wait, vk::PipelineStageFlagBits2 signal);
